@@ -37,47 +37,10 @@
       <artifactId>scala-reflect</artifactId>
       <version>${scala.version}</version>
     </dependency>
-    
-    <dependency>
-      <groupId>com.twitter</groupId>
-      <artifactId>finagle-core_2.10</artifactId>
-      <version>6.4.0</version>
-    </dependency>
-    <dependency>
-      <groupId>com.twitter</groupId>
-      <artifactId>finagle-thrift_2.10</artifactId>
-      <version>6.4.0</version>
-    </dependency>
-    <dependency>
-      <groupId>com.twitter</groupId>
-      <artifactId>scrooge-runtime_2.10</artifactId>
-      <version>3.1.1</version>
-    </dependency>
   </dependencies>
-  
+
   <build>
     <plugins>
-      <!-- compile thrift code -->
-      <plugin>
-        <groupId>com.twitter</groupId>
-        <artifactId>scrooge-maven-plugin</artifactId>
-        <version>3.1.1</version>
-        <configuration>
-          <language>scala</language>
-          <thriftOpts>
-            <thriftOpt>--finagle</thriftOpt>
-          </thriftOpts>
-        </configuration>
-        <executions>
-          <execution>
-            <id>thrift-sources</id>
-            <phase>generate-sources</phase>
-            <goals>
-              <goal>compile</goal>
-            </goals>
-          </execution>
-        </executions>
-      </plugin>
       <!-- compile scala code -->
       <plugin>
         <groupId>net.alchim31.maven</groupId>

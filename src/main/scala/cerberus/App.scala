@@ -8,17 +8,18 @@ import java.io._
 
 object App {
   def main(args: Array[String]) {
-    // make sure thrift works
-    assert(cerberus.mgmt.Constants.ArbitraryValue == 1)
-
     println("Local: Hello World!")
 
     val port = 1234
     val server = new ServerSocket(1234)
 
-    //val qsub = new DRMAAJobService
-    val qsub = new LocalJobService
-    val jobId = qsub.spawnJob("cerberus.HelloWorld", Array("localhost", port.toString))
+    val qsub = new DRMAAJobService
+    //val qsub = new LocalJobService
+    val localhost = InetAddress.getLocalHost.getCanonicalHostName
+    if(qsub.isInstanceOf[DRMAAJobService]) {
+      assert(localhost != "localhost")
+    }
+    val jobId = qsub.spawnJob("cerberus.HelloWorld", Array(localhost, port.toString))
     println("spawned "+jobId)
 
     val client = server.accept()
@@ -28,8 +29,6 @@ object App {
 
     client.close()
     server.close()
-
-
   }
 }
 
