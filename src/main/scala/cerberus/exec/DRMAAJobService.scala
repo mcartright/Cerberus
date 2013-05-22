@@ -10,7 +10,7 @@ class DRMAAJobService extends JobService {
 
   def spawnJob(className: String, args: Array[String]): String = {
     val jt = session.createJobTemplate()
-    jt.setJobName("cerberus-"+className)
+    jt.setJobName(className)
     jt.setRemoteCommand(JavaBinary)
     jt.setWorkingDirectory(WorkingDir)
     jt.setArgs(Array(

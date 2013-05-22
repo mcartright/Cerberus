@@ -20,4 +20,13 @@ trait JobService {
   }
 }
 
+class LocalJobService extends JobService {
+  def spawnJob(className: String, args: Array[String]): String = {
+    java.lang.Runtime.getRuntime.exec(Array(JavaBinary, "-cp", ClassPath, className) ++ args)
+
+    "locally" //nonsense id
+  }
+  def shutdown() { }
+}
+
 

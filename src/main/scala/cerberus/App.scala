@@ -1,25 +1,49 @@
 package cerberus
 
 import cerberus.exec.DRMAAJobService
+import cerberus.exec.LocalJobService
+
+import java.net.{InetAddress, ServerSocket, Socket}
+import java.io._
 
 object App {
   def main(args: Array[String]) {
     // make sure thrift works
     assert(cerberus.mgmt.Constants.ArbitraryValue == 1)
 
-    println("Hello World!")
+    println("Local: Hello World!")
+
+    val port = 1234
+    val server = new ServerSocket(1234)
 
     //val qsub = new DRMAAJobService
-    //val jobId = qsub.spawnJob("cerberus.HelloWorld", Array("alpha", "beta"))
+    val qsub = new LocalJobService
+    val jobId = qsub.spawnJob("cerberus.HelloWorld", Array("localhost", port.toString))
+    println("spawned "+jobId)
 
-    //println("spawned "+jobId)
+    val client = server.accept()
+    val in = new BufferedReader(new InputStreamReader(client.getInputStream()))
+
+    println(in.readLine())
+
+    client.close()
+    server.close()
+
+
   }
 }
 
 object HelloWorld {
   def main(args: Array[String]) {
-    println("Hello World!")
-    println(args.mkString("`","', `","'"))
+    val addr = InetAddress.getByName(args(0))
+    val port = args(1).toInt
+
+    val skt = new Socket(addr, port)
+    val ps = new PrintStream(skt.getOutputStream())
+
+    ps.println("Remote: Hello World!")
+
+    skt.close()
   }
 }
 
