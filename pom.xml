@@ -57,6 +57,7 @@
   
   <build>
     <plugins>
+      <!-- compile thrift code -->
       <plugin>
         <groupId>com.twitter</groupId>
         <artifactId>scrooge-maven-plugin</artifactId>
@@ -77,6 +78,7 @@
           </execution>
         </executions>
       </plugin>
+      <!-- compile scala code -->
       <plugin>
         <groupId>net.alchim31.maven</groupId>
         <artifactId>scala-maven-plugin</artifactId>
@@ -101,6 +103,31 @@
           </execution>
         </executions>
       </plugin>
+      <!-- build a shaded jar -->
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-shade-plugin</artifactId>
+        <version>2.0</version>
+        <executions>
+          <execution>
+            <phase>package</phase>
+            <goals>
+              <goal>shade</goal>
+            </goals>
+            <configuration>
+              <transformers>
+                <transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
+                  <manifestEntries>
+                    <Main-Class>${mainClass}</Main-Class>
+                    <Build-Number>1</Build-Number>
+                  </manifestEntries>
+                </transformer>
+              </transformers>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
+
     </plugins>
   </build>
 </project>
