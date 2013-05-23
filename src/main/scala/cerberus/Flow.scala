@@ -26,6 +26,9 @@ abstract class Flow[T <: Encodable : ClassTag] extends Encodable {
     fp.close()
   }
 
+  /**
+   * Modeled after Scala's BufferedIterator
+   */
   def buffered: BufferedFlow[T] = {
     val self = this
     new BufferedFlow[T] {
@@ -73,8 +76,8 @@ abstract class Flow[T <: Encodable : ClassTag] extends Encodable {
     bldr.result
   }
 
-  def splitrr(path: String, n: Int) = {
-    val streamNames = (0 until n).map(idx => "%s_%d".format(path, idx))
+  def splitrr(n: Int = 10) = {
+    val streamNames = (0 until n).map(idx => Flow.gensym("split"))
     val streams = streamNames.map(fn => FileFlow.openOutputStream(fn))
 
     var curStream = 0
@@ -89,6 +92,10 @@ abstract class Flow[T <: Encodable : ClassTag] extends Encodable {
   }
 }
 
+/**
+ * Modeled after Scala's BufferedIterator
+ * Used to make merge sorting easier
+ */
 abstract class BufferedFlow[T <: Encodable : ClassTag] extends Flow[T] {
   def head: T
   def hasNext: Boolean

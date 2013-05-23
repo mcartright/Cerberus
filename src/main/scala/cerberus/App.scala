@@ -16,7 +16,7 @@ object App {
     val files = new SeqFlow(inputFiles)
 
     // this distributes the data to 2 files starting with prefix split, and returns the names
-    val distrib1 = files.splitrr("split", 2)
+    val distrib1 = files.splitrr(2)
 
     // this would happen remotely
     val openedDistrib1 = distrib1.map(df => new FileFlow[String](df))
