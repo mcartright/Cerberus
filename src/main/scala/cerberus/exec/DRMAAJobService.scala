@@ -19,7 +19,7 @@ class DRMAAJobService extends JobService {
     
     val id = session.runJob(jt)
     
-    snooze()
+    Time.snooze()
     
     if(session.getJobProgramStatus(id) == Session.FAILED) {
       Console.err.println("ERROR: Job Failed! "+className+" "+args.mkString(" ")+id)

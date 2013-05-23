@@ -11,13 +11,6 @@ trait JobService {
   def spawnJob(className: String, args: Array[String]): String
   def shutdown(): Unit
 
-  def snooze(ms: Int=1000) {
-    try {
-      Thread.sleep(ms)
-    } catch {
-      case _: java.lang.InterruptedException => { }
-    }
-  }
 }
 
 class LocalJobService extends JobService {
