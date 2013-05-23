@@ -141,3 +141,18 @@ class FlatMappedFlow[A <: Encodable : ClassTag, B <: Encodable : ClassTag] (inpu
   def next = curFlow.next
 }
 
+class RoundRobinReduceFlow[T <:Encodable :ClassTag](input: IndexedSeq[Flow[T]]) extends Flow[T] {
+  var i = 0
+  def hasNext = input.exists(_.hasNext)
+  def next = {
+    assert(hasNext)
+    // find the next non-empty Flow
+    while(!input(i).hasNext) {
+      i = (i+1) % input.size
+    }
+    val result = input(i).next
+    i = (i+1) % input.size
+    result
+  }
+}
+

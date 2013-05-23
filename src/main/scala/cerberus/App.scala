@@ -20,16 +20,16 @@ object App {
     def readLines(path: String) = scala.io.Source.fromFile(path).getLines
 
     // on each node:
-    val needsReduce = openedDistrib1.map {
+    val wordsFlow = new RoundRobinReduceFlow( openedDistrib1.map {
       _.flatMap { filePath => 
         val words = readLines(filePath).mkString(" ").split("\\s+")
         //words.foreach(println)
         new SeqFlow(words)
       }
-    }
+    })
 
     // hacking into scalaville
-    needsReduce.flatMap(_.toArray).toSet.mkString(",")
+    println(wordsFlow.toArray.toSet.mkString(","))
   }
 }
 
