@@ -20,7 +20,9 @@ abstract class Flow[T <: Encodable : ClassTag] {
     }
     fp.close()
   }
+
   def map[B <: Encodable : ClassTag](op: T=>B) = new MappedFlow(this, op)
+
   def flatMap[B <: Encodable : ClassTag](op: T=>Flow[B]) =
     new FlatMappedFlow(this, op)
 
