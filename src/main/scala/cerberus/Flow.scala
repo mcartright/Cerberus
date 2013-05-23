@@ -21,8 +21,9 @@ abstract class Flow[T <: Encodable : ClassTag] {
     fp.close()
   }
   def map[B <: Encodable : ClassTag](op: T=>B) = new MappedFlow(this, op)
-  def flatMap[B <: Encodable : ClassTag](op: T=>Flow[B]) = new FlatMappedFlow(this, op)
-  
+  def flatMap[B <: Encodable : ClassTag](op: T=>Flow[B]) =
+    new FlatMappedFlow(this, op)
+
   // bad idea, only for testing
   def toArray: Array[T] = {
     var bldr = Array.newBuilder[T]
@@ -31,11 +32,11 @@ abstract class Flow[T <: Encodable : ClassTag] {
     }
     bldr.result
   }
-  
+
   def splitrr(path: String, n: Int) = {
     val streamNames = (0 until n).map(idx => "%s_%d".format(path, idx))
     val streams = streamNames.map(fn => FileFlow.openOutputStream(fn))
-    
+
     var curStream = 0
 
     while(hasNext) {
@@ -48,7 +49,8 @@ abstract class Flow[T <: Encodable : ClassTag] {
   }
 }
 
-class SeqFlow[T <: Encodable : ClassTag](val data: IndexedSeq[T]) extends Flow[T] {
+class SeqFlow[T <: Encodable : ClassTag](val data: IndexedSeq[T])
+    extends Flow[T] {
   var i=0
   def hasNext = i < data.size
   def next = {
@@ -62,12 +64,12 @@ class SeqFlow[T <: Encodable : ClassTag](val data: IndexedSeq[T]) extends Flow[T
 object FileFlow {
   import java.io._
   val MagicNumber = 0xdeadbeef
-  
+
   def openInputStream(path: String): ObjectInputStream = {
     var fp: ObjectInputStream = null
     try {
       fp = new ObjectInputStream(new DataInputStream(new FileInputStream(path)))
-      
+
       if(fp.readInt != FileFlow.MagicNumber) {
         println("FileFlow("+path+") has a bad magic number!")
         ???
@@ -81,15 +83,16 @@ object FileFlow {
       }
     }
   }
-  
+
   def openOutputStream(path: String): ObjectOutputStream = {
     var fp: ObjectOutputStream = null
 
     try {
-      fp = new ObjectOutputStream(new DataOutputStream(new FileOutputStream(path)))
-      
+      fp =
+        new ObjectOutputStream(new DataOutputStream(new FileOutputStream(path)))
+
       fp.writeInt(MagicNumber)
-      
+
       return fp
     } catch {
       case x : Throwable => {
@@ -101,7 +104,8 @@ object FileFlow {
   }
 }
 
-class FileFlow[T <: Encodable : ClassTag](val inputPath: String) extends Flow[T] {
+class FileFlow[T <: Encodable : ClassTag](val inputPath: String)
+    extends Flow[T] {
   var fp = FileFlow.openInputStream(inputPath)
   var current = tryNext
 
@@ -119,14 +123,22 @@ class FileFlow[T <: Encodable : ClassTag](val inputPath: String) extends Flow[T]
   }
 }
 
-class MappedFlow[A <: Encodable : ClassTag, B <: Encodable: ClassTag](input: Flow[A], op: A=>B) extends Flow[B] {
+class MappedFlow[A <: Encodable : ClassTag, B <: Encodable: ClassTag](
+  input: Flow[A],
+  op: A=>B
+)
+    extends Flow[B] {
   def hasNext = input.hasNext
   def next = op(input.next)
 }
 
-class FlatMappedFlow[A <: Encodable : ClassTag, B <: Encodable : ClassTag] (input: Flow[A], op: A=>Flow[B]) extends Flow[B] {
+class FlatMappedFlow[A <: Encodable : ClassTag, B <: Encodable : ClassTag](
+  input: Flow[A],
+  op: A=>Flow[B]
+)
+    extends Flow[B] {
   var curFlow: Flow[B] = unflatNext
-    
+
   def unflatNext: Flow[B] = {
     if(input.hasNext) {
       op(input.next)
@@ -141,7 +153,10 @@ class FlatMappedFlow[A <: Encodable : ClassTag, B <: Encodable : ClassTag] (inpu
   def next = curFlow.next
 }
 
-class RoundRobinReduceFlow[T <:Encodable :ClassTag](input: IndexedSeq[Flow[T]]) extends Flow[T] {
+class RoundRobinReduceFlow[T <:Encodable :ClassTag](
+  input: IndexedSeq[Flow[T]]
+)
+    extends Flow[T] {
   var i = 0
   def hasNext = input.exists(_.hasNext)
   def next = {
