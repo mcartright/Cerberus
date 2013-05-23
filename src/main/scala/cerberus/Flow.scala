@@ -22,6 +22,9 @@ abstract class Flow[T <: Encodable : ClassTag] {
   }
   def map[B <: Encodable : ClassTag](op: T=>B) = new MappedFlow(this, op)
   def flatMap[B <: Encodable : ClassTag](op: T=>Flow[B]) = new FlatMappedFlow(this, op)
+
+  // forces evaluation to sort this in memory
+  def inMemorySorted(implicit ord : math.Ordering[T]) = new SeqFlow(toArray.sorted)
   
   // bad idea, only for testing
   def toArray: Array[T] = {
@@ -126,7 +129,7 @@ class MappedFlow[A <: Encodable : ClassTag, B <: Encodable: ClassTag](input: Flo
 
 class FlatMappedFlow[A <: Encodable : ClassTag, B <: Encodable : ClassTag] (input: Flow[A], op: A=>Flow[B]) extends Flow[B] {
   var curFlow: Flow[B] = unflatNext
-    
+  
   def unflatNext: Flow[B] = {
     if(input.hasNext) {
       op(input.next)
