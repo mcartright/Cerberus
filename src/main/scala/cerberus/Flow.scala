@@ -24,6 +24,10 @@ abstract class Flow[T <: Encodable : ClassTag] {
   def flatMap[B <: Encodable : ClassTag](op: T=>Flow[B]) =
     new FlatMappedFlow(this, op)
 
+  // forces evaluation to sort this in memory
+  def inMemorySorted(implicit ord : math.Ordering[T]) =
+    new SeqFlow(toArray.sorted)
+
   // bad idea, only for testing
   def toArray: Array[T] = {
     var bldr = Array.newBuilder[T]
