@@ -62,7 +62,7 @@ abstract class Flow[T <: Encodable : ClassTag] extends Encodable {
     new SeqFlow(toArray.sorted)
   
   def sorted(implicit ord : math.Ordering[T]) =
-    new SortedFlow(this, ord)
+    new SortedFlow(this)
 
   // bad idea, only for testing
   def toArray: Array[T] = {
@@ -218,13 +218,10 @@ class RoundRobinReduceFlow[T <:Encodable :ClassTag](
   }
 }
 
-object SortedReduceFlow {
-  def apply[T <: Encodable :ClassTag](rawInputs: IndexedSeq[Flow[T]])(implicit ord: Ordering[T]) = new SortedReduceFlow(rawInputs, ord)
-}
-
 class SortedReduceFlow[T <:Encodable :ClassTag](
-  rawInputs: IndexedSeq[Flow[T]],
-  ord: math.Ordering[T]
+  rawInputs: IndexedSeq[Flow[T]]
+)(
+  implicit ord: math.Ordering[T]
 )
     extends Flow[T] {
   val inputs = rawInputs.map(_.buffered)
@@ -252,9 +249,10 @@ class SortedReduceFlow[T <:Encodable :ClassTag](
 
 class SortedFlow[T <:Encodable :ClassTag](
   input: Flow[T],
-  ord: math.Ordering[T],
   bufferSize: Int = 8192
-)
+)(
+  implicit ord: math.Ordering[T]
+  )
     extends Flow[T] {
   // keep up to bufferSize elements in memory at once
   var buffer = new Array[T](bufferSize)
@@ -276,7 +274,7 @@ class SortedFlow[T <:Encodable :ClassTag](
 
   // todo heuristic for number of open files
   // until then, just open all the diskBuffers
-  val reducer = new SortedReduceFlow[T](diskBuffers.toIndexedSeq, ord)
+  val reducer = new SortedReduceFlow[T](diskBuffers.toIndexedSeq)
 
   def hasNext = reducer.hasNext
   def next() = reducer.next()

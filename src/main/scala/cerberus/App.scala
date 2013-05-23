@@ -32,7 +32,7 @@ object App {
         }
         new SeqFlow(words).sorted
       }
-    }, math.Ordering[WordPos])
+    })
 
     // hacking into scalaville
     val result = wordsFlow.toArray
