@@ -3,6 +3,13 @@ package cerberus
 import java.io.{Serializable => Encodable}
 import reflect.ClassTag
 
+object Flow {
+  def empty[T <: Encodable : ClassTag] = new Flow[T] {
+    def hasNext = false
+    def next = ???
+  }
+}
+
 abstract class Flow[T <: Encodable : ClassTag] {
   def hasNext: Boolean
   def next: T
@@ -14,6 +21,8 @@ abstract class Flow[T <: Encodable : ClassTag] {
     fp.close()
   }
   def map[B <: Encodable : ClassTag](op: T=>B) = new MappedFlow(this, op)
+  def flatMap[B <: Encodable : ClassTag](op: T=>Flow[B]) = new FlatMappedFlow(this, op)
+  
   // bad idea, only for testing
   def toArray: Array[T] = {
     var bldr = Array.newBuilder[T]
@@ -21,6 +30,21 @@ abstract class Flow[T <: Encodable : ClassTag] {
       bldr += next
     }
     bldr.result
+  }
+  
+  def splitrr(path: String, n: Int) = {
+    val streamNames = (0 until n).map(idx => "%s_%d".format(path, idx))
+    val streams = streamNames.map(fn => FileFlow.openOutputStream(fn))
+    
+    var curStream = 0
+
+    while(hasNext) {
+      streams(curStream).writeObject(next)
+      curStream = (curStream + 1) % n
+    }
+    streams.foreach(_.close())
+
+    streamNames
   }
 }
 
@@ -98,5 +122,22 @@ class FileFlow[T <: Encodable : ClassTag](val inputPath: String) extends Flow[T]
 class MappedFlow[A <: Encodable : ClassTag, B <: Encodable: ClassTag](input: Flow[A], op: A=>B) extends Flow[B] {
   def hasNext = input.hasNext
   def next = op(input.next)
+}
+
+class FlatMappedFlow[A <: Encodable : ClassTag, B <: Encodable : ClassTag] (input: Flow[A], op: A=>Flow[B]) extends Flow[B] {
+  var curFlow: Flow[B] = unflatNext
+    
+  def unflatNext: Flow[B] = {
+    if(input.hasNext) {
+      op(input.next)
+    } else Flow.empty
+  }
+  def hasNext = {
+    if(!curFlow.hasNext) {
+      curFlow = unflatNext
+    }
+    curFlow.hasNext
+  }
+  def next = curFlow.next
 }
 
