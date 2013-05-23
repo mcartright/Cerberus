@@ -1,6 +1,13 @@
 package cerberus
 
-case class WordPos(term: String, pos: Int)
+case class WordPos(term: String, pos: Int) extends Ordered[WordPos] {
+  override def compare(rhs: WordPos) = {
+    term.compare(rhs.term) match {
+      case 0 => pos - rhs.pos
+      case x => x
+    }
+  }
+}
 case class Posting(term: String, positions: Array[Int])
 
 object App {
@@ -18,17 +25,19 @@ object App {
     def readLines(path: String) = scala.io.Source.fromFile(path).getLines
 
     // on each node:
-    val wordsFlow = new RoundRobinReduceFlow( openedDistrib1.map {
+    val wordsFlow = new SortedReduceFlow( openedDistrib1.map {
       _.flatMap { filePath => 
         val words = readLines(filePath).mkString(" ").split("\\s+").zipWithIndex.map {
-          case(term, idx) => WordPos(term, idx)
+          case(term, idx) => WordPos(term.toLowerCase, idx)
         }
-        new SeqFlow(words)
+        new SeqFlow(words).sorted
       }
-    })
+    }, math.Ordering[WordPos])
 
     // hacking into scalaville
-    println(wordsFlow.toArray.toSet.mkString(","))
+    val result = wordsFlow.toArray
+    // printing
+    println(result.mkString(" -- "))
   }
 }
 

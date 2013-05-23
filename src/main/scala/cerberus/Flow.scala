@@ -4,21 +4,52 @@ import java.io.{Serializable => Encodable}
 import reflect.ClassTag
 
 object Flow {
+  var uid = 0
+  def gensym(txt: String) = {
+    uid += 1
+    txt + uid.toString
+  }
   def empty[T <: Encodable : ClassTag] = new Flow[T] {
     def hasNext = false
-    def next = ???
+    def next() = ???
   }
 }
 
-abstract class Flow[T <: Encodable : ClassTag] {
+abstract class Flow[T <: Encodable : ClassTag] extends Encodable {
   def hasNext: Boolean
-  def next: T
+  def next(): T
   def write(path: String) {
     var fp = FileFlow.openOutputStream(path)
     while(hasNext) {
-      fp.writeObject(next)
+      fp.writeObject(next())
     }
     fp.close()
+  }
+
+  def buffered: BufferedFlow[T] = {
+    val self = this
+    new BufferedFlow[T] {
+      private var hd: T = _
+      private var hdDefined: Boolean = false
+
+      def head: T = {
+        if (!hdDefined) {
+          hd = next()
+          hdDefined = true
+        }
+        hd
+      }
+
+      def hasNext =
+        hdDefined || self.hasNext
+
+      def next() = {
+        if (hdDefined) {
+          hdDefined = false
+          hd
+        } else self.next()
+      }
+    }
   }
 
   def map[B <: Encodable : ClassTag](op: T=>B) = new MappedFlow(this, op)
@@ -29,12 +60,15 @@ abstract class Flow[T <: Encodable : ClassTag] {
   // forces evaluation to sort this in memory
   def inMemorySorted(implicit ord : math.Ordering[T]) =
     new SeqFlow(toArray.sorted)
+  
+  def sorted(implicit ord : math.Ordering[T]) =
+    new SortedFlow(this, ord)
 
   // bad idea, only for testing
   def toArray: Array[T] = {
     var bldr = Array.newBuilder[T]
     while(hasNext) {
-      bldr += next
+      bldr += next()
     }
     bldr.result
   }
@@ -46,7 +80,7 @@ abstract class Flow[T <: Encodable : ClassTag] {
     var curStream = 0
 
     while(hasNext) {
-      streams(curStream).writeObject(next)
+      streams(curStream).writeObject(next())
       curStream = (curStream + 1) % n
     }
     streams.foreach(_.close())
@@ -55,11 +89,18 @@ abstract class Flow[T <: Encodable : ClassTag] {
   }
 }
 
+abstract class BufferedFlow[T <: Encodable : ClassTag] extends Flow[T] {
+  def head: T
+  def hasNext: Boolean
+  def next(): T
+}
+
+
 class SeqFlow[T <: Encodable : ClassTag](val data: IndexedSeq[T])
     extends Flow[T] {
   var i=0
   def hasNext = i < data.size
-  def next = {
+  def next() = {
     require(i < data.size)
     val cur = data(i)
     i+=1
@@ -122,7 +163,7 @@ class FileFlow[T <: Encodable : ClassTag](val inputPath: String)
   }
 
   def hasNext = current.nonEmpty
-  def next = {
+  def next() = {
     val last = current.get
     current = tryNext
     last
@@ -135,7 +176,7 @@ class MappedFlow[A <: Encodable : ClassTag, B <: Encodable: ClassTag](
 )
     extends Flow[B] {
   def hasNext = input.hasNext
-  def next = op(input.next)
+  def next() = op(input.next())
 }
 
 class FlatMappedFlow[A <: Encodable : ClassTag, B <: Encodable : ClassTag](
@@ -147,7 +188,7 @@ class FlatMappedFlow[A <: Encodable : ClassTag, B <: Encodable : ClassTag](
 
   def unflatNext: Flow[B] = {
     if(input.hasNext) {
-      op(input.next)
+      op(input.next())
     } else Flow.empty
   }
   def hasNext = {
@@ -156,7 +197,7 @@ class FlatMappedFlow[A <: Encodable : ClassTag, B <: Encodable : ClassTag](
     }
     curFlow.hasNext
   }
-  def next = curFlow.next
+  def next() = curFlow.next()
 }
 
 class RoundRobinReduceFlow[T <:Encodable :ClassTag](
@@ -165,7 +206,7 @@ class RoundRobinReduceFlow[T <:Encodable :ClassTag](
     extends Flow[T] {
   var i = 0
   def hasNext = input.exists(_.hasNext)
-  def next = {
+  def next() = {
     assert(hasNext)
     // find the next non-empty Flow
     while(!input(i).hasNext) {
@@ -177,3 +218,66 @@ class RoundRobinReduceFlow[T <:Encodable :ClassTag](
   }
 }
 
+object SortedReduceFlow {
+  def apply[T <: Encodable :ClassTag](rawInputs: IndexedSeq[Flow[T]])(implicit ord: Ordering[T]) = new SortedReduceFlow(rawInputs, ord)
+}
+
+class SortedReduceFlow[T <:Encodable :ClassTag](
+  rawInputs: IndexedSeq[Flow[T]],
+  ord: math.Ordering[T]
+)
+    extends Flow[T] {
+  val inputs = rawInputs.map(_.buffered)
+  def hasNext = inputs.exists(_.hasNext)
+  def next() = {
+    assert(hasNext)
+    
+    // find the minimum of all the flows and return that
+    var bestIdx = -1
+    var bestVal: T = inputs.find(_.hasNext).get.head
+
+    (0 until inputs.size).foreach(idx => {
+      if(inputs(idx).hasNext) {
+        if(bestIdx == -1 || ord.lt(inputs(idx).head, bestVal)) {
+          bestIdx = idx
+          bestVal = inputs(idx).head
+        }
+      }
+    })
+
+    inputs(bestIdx).next
+  }
+}
+
+
+class SortedFlow[T <:Encodable :ClassTag](
+  input: Flow[T],
+  ord: math.Ordering[T],
+  bufferSize: Int = 8192
+)
+    extends Flow[T] {
+  // keep up to bufferSize elements in memory at once
+  var buffer = new Array[T](bufferSize)
+  // fill up diskBuffers with the list of files to merge later
+  var diskBuffers = Set[FileFlow[T]]()
+  
+  // evaluate immediately and flush to the buffers, sorting as we go
+  while(input.hasNext) {
+    var bufPtr = 0
+    while(bufPtr < bufferSize && input.hasNext) {
+      buffer(bufPtr) = input.next()
+      bufPtr += 1
+    }
+    val tmpName = Flow.gensym("/tmp/sortbuf")
+    new SeqFlow(buffer.take(bufPtr).sorted(ord)).write(tmpName)
+
+    diskBuffers += new FileFlow[T](tmpName)
+  }
+
+  // todo heuristic for number of open files
+  // until then, just open all the diskBuffers
+  val reducer = new SortedReduceFlow[T](diskBuffers.toIndexedSeq, ord)
+
+  def hasNext = reducer.hasNext
+  def next() = reducer.next()
+}
