@@ -3,19 +3,23 @@ import scala.math.Ordered
 import java.io._
 
 // Define the writer function
-abstract class Writer[T1, R](val dst: String, val suffix: String)
-    extends Function1[T1, R] {
-  val dstFile = new FileWriter(dst + suffix)
+abstract class Writer[T1, R](
+  val dst: String,
+  val suffix: String
+) extends Function1[T1, R] with Serializable {
+  @transient lazy val dstFile = new FileWriter(dst + suffix)
   def close = dstFile.close
   def apply(obj: T1): R
 }
 
-def count(fn: String): Int = {
+case class CountedSplit(val filename: String, val count: Int)
+
+val count = (fn: String) => {
   val headers =
     Source.fromFile(fn).getLines.filter { l =>
       l == "<DOC>"
     }
-  headers.size
+  CountedSplit(fn, headers.size)
 }
 
 // We start with a list of files
@@ -26,12 +30,8 @@ val files =
 
 // Fan them out for counting
 // ParserCounter
-case class CountedSplit(val filename: String, val count: Int)
 case class OffsetSplit(val file: String, val count: Int, val start: Int)
-val counted = files.par.map { f =>
-  val num = count(f)
-  CountedSplit(f, num)
-}
+val counted = files.par.map(count)
 
 // offsetting function
 val offset = new Function1[CountedSplit, OffsetSplit] {
@@ -72,6 +72,7 @@ val parsedDocuments =
   shifted.par.flatMap(intoDocuments).map(tokenize).map(normalize)
 
 case class IdLength(val id: Int, val length: Int)
+
 val writeLengths = new Writer[IdLength, Unit](prefix, "lengths") {
   def apply(p: IdLength): Unit = dstFile.write(s"${p.id}\t${p.length}\n")
 }
@@ -95,12 +96,11 @@ parsedDocuments.map {
 writeNames.close
 
 // postings
-@serializable case class Posting(
+case class Posting(
   val term: String,
   val doc: Int,
   val positions: Array[Int]
-)
-    extends Ordered[Posting] {
+) extends Ordered[Posting] {
   def compare(that: Posting): Int = {
     var r = this.term compare that.term
     if (r != 0) return r
