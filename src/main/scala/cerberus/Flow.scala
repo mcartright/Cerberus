@@ -8,8 +8,10 @@ import math.Ordering
 /** Entry point for flows.
   */
 object Flow {
-  def par[A](gen: GenTraversableOnce[A]): Flow[A] = new Distributed[A] {}
-  def seq[A](gen: GenTraversableOnce[A]): Flow[A] = new Sequential[A] {}
+  def par[A](gen: GenTraversableOnce[A]): Flow[A] =
+    new Distributed[A] with Base[A] { val src = gen }
+  def seq[A](gen: GenTraversableOnce[A]): Flow[A] =
+    new Sequential[A] with Base[A] { val src = gen }
   def local[A](gen: GenTraversableOnce[A]): Seq[A] = gen.seq.toSeq
 }
 
@@ -39,6 +41,7 @@ trait Flow[A] {
    def sum
 
    //  Not-so-low-hanging fruit.
+   def apply
    def combinations
    def containsSlice
    def drop
@@ -61,6 +64,7 @@ trait Flow[A] {
    def init
    def inits
    def intersect
+   def iterator
    def last
    def lastIndexOf(elem, end)
    def lastIndexOf(elem)
@@ -104,7 +108,7 @@ trait Flow[A] {
    def zipWithIndex
    */
 
-
+  def foreach(f: A => Unit): Unit
   def sorted[B >: A](implicit ord: Ordering[B]): Flow[A]
   def map[B](f: A => B): Flow[B]
   def flatMap[B](f: A => GenTraversableOnce[B]): Flow[B]
@@ -112,6 +116,12 @@ trait Flow[A] {
   def filterNot(p: A => Boolean): Flow[A] = filter(!p(_))
   def seq: Flow[A]
   def par: Flow[A]
+}
+
+/** Represents the entry point into the graph.
+  */
+trait Base[A] {
+  def src: GenTraversableOnce[A]
 }
 
 // Represents distributed computation - essentially parallel computation
@@ -154,18 +164,6 @@ trait Sequential[A] extends Flow[A] {
   def sorted[B >: A](implicit ord: Ordering[B]): Flow[A] =
     new Sorted(this, ord)
   def seq: Flow[A] = this
-  def apply(idx: Int): A = {
-    val iter = this.iterator
-    var i = 0
-    while (i < idx && iter.hasNext) iter.next
-    if (i == idx) iter.next
-    else throw new IndexOutOfBoundsException(s"$idx")
-  }
-
-  def iterator: Iterator[A] = new Iterator[A] {
-    def hasNext: Boolean = ???
-    def next: A = ???
-  }
 
   // the implementing classes
   case class Mapped[B](val incoming: Flow[A], val f: A => B)
