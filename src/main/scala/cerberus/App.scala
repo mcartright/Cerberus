@@ -1,5 +1,7 @@
 package cerberus
 
+import cerberus.attic._
+
 case class WordPos(term: String, pos: Int) extends Ordered[WordPos] {
   override def compare(rhs: WordPos) = {
     term.compare(rhs.term) match {
@@ -26,7 +28,7 @@ object App {
 
     // on each node:
     val wordsFlow = new SortedReduceFlow( openedDistrib1.map {
-      _.flatMap { filePath => 
+      _.flatMap { filePath =>
         val words = readLines(filePath).mkString(" ").split("\\s+").zipWithIndex.map {
           case(term, idx) => WordPos(term.toLowerCase, idx)
         }
