@@ -1,59 +1,45 @@
 package cerberus
 
-import cerberus.exec.DRMAAJobService
-import cerberus.exec.LocalJobService
+import cerberus.attic._
 
-import java.net.{InetAddress, ServerSocket, Socket}
-import java.io._
+case class WordPos(term: String, pos: Int) extends Ordered[WordPos] {
+  override def compare(rhs: WordPos) = {
+    term.compare(rhs.term) match {
+      case 0 => pos - rhs.pos
+      case x => x
+    }
+  }
+}
+case class Posting(term: String, positions: Array[Int])
 
 object App {
   def main(args: Array[String]) {
-    println("Local: Hello World!")
+    val inputFiles = IndexedSeq("data/tiny/doc1.txt", "data/tiny/doc2.txt")
+    val files = new SeqFlow(inputFiles)
 
-    val port = 1234
-    val server = new ServerSocket(1234)
+    // this distributes the data to 2 files starting with prefix split, and returns the names
+    val distrib1 = files.splitrr(2)
 
-    val qsub = if(args.size == 1 && args(0) == "drmaa") { 
-      new DRMAAJobService
-    } else new LocalJobService
+    // this would happen remotely
+    val openedDistrib1 = distrib1.map(df => new FileFlow[String](df))
 
-    val localhost = InetAddress.getLocalHost.getCanonicalHostName
-    if(qsub.isInstanceOf[DRMAAJobService]) {
-      assert(localhost != "localhost")
-    }
-    val jobId = qsub.spawnJob("cerberus.HelloWorld", Array(localhost, port.toString))
-    println("spawned "+jobId)
+    // cuz ugly
+    def readLines(path: String) = scala.io.Source.fromFile(path).getLines
 
-    val client = server.accept()
-    val out = new ObjectOutputStream(new DataOutputStream(client.getOutputStream()))
-    val in = new BufferedReader(new InputStreamReader(client.getInputStream()))
+    // on each node:
+    val wordsFlow = new SortedReduceFlow( openedDistrib1.map {
+      _.flatMap { filePath =>
+        val words = readLines(filePath).mkString(" ").split("\\s+").zipWithIndex.map {
+          case(term, idx) => WordPos(term.toLowerCase, idx)
+        }
+        new SeqFlow(words).sorted
+      }
+    })
 
-    val doThisRemotely: PrintStream=>Unit = (ps => { ps.println("Anonymously Remote: Hello World!") })
-    out.writeObject(doThisRemotely)
-
-    println(in.readLine())
-    println(in.readLine())
-
-    client.close()
-    server.close()
-  }
-}
-
-object HelloWorld {
-  def main(args: Array[String]) {
-    val addr = InetAddress.getByName(args(0))
-    val port = args(1).toInt
-
-    val skt = new Socket(addr, port)
-    val ps = new PrintStream(skt.getOutputStream())
-    ps.println("Remote: Hello World!")
-    
-    val in = new ObjectInputStream(new DataInputStream(skt.getInputStream()))
-    val func = in.readObject().asInstanceOf[PrintStream=>Unit]
-    
-    func(ps)
-
-    skt.close()
+    // hacking into scalaville
+    val result = wordsFlow.toArray
+    // printing
+    println(result.mkString(" -- "))
   }
 }
 
