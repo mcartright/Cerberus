@@ -25,14 +25,6 @@ val shifted = counted.seq.foreach { s =>
 val parsedDocuments =
   shifted.par.flatMap(intoDocuments).map(tokenize).map(normalize)
 
-// Each document is processed multiple times
-// hmm - this should not produce a stream of tuples,
-// it needs to produce 1 tuple of 4 streams 0 let's pretend it does that
-// val results = parsedDocuments.map { doc =>
-//  (getLengths(doc), getName(doc), getPostings(doc), getFieldPostings(doc))
-// }
-
-// ok so that's way hard, how about this:
 // lengths
 parsedDocuments.map {
   doc => (doc.id, doc.length)
