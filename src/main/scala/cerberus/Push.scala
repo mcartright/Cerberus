@@ -9,15 +9,28 @@ import scala.reflect.ClassTag
 
 // TODO, make this configuration better
 class RuntimeConfig(val jobUniq: String) {
+  import java.io._
   // for helping make files 
   var uid = 0
+  
+  def makeParentDirs(f: File) {
+    val parent = f.getParentFile()
+    if(parent != null) {
+      parent.mkdirs()
+    }
+  }
+  def makeParentDirs(path: String) { makeParentDirs(new File(path)) }
   def nextFileName() = {
     uid += 1
-    jobUniq + "/file"+uid
+    val path = jobUniq + "/file"+uid
+    makeParentDirs(path)
+    path
   }
-  def nextScratchFileName() = {
+  def nextScratchName() = {
     uid += 1
-    "/tmp/"+jobUniq+"/scratch"+uid
+    val path = "/tmp/"+jobUniq+"/scratch"+uid
+    makeParentDirs(path)
+    path
   }
 }
 
@@ -72,6 +85,9 @@ class SortedNode[T <:Encodable :ClassTag](val child: Node[T], val encoding: Prot
   // how many are in the buffer
   var count = 0 
 
+  // merge 10 files at a time
+  val MergeFileCount = 10
+
   // save this locally
   var rcfg: RuntimeConfig = null
   def conf(cfg: RuntimeConfig) {
@@ -80,7 +96,11 @@ class SortedNode[T <:Encodable :ClassTag](val child: Node[T], val encoding: Prot
   }
 
   def pushBufferToDisk() {
-    val tmpName = rcfg.nextScratchFileName()
+    val tmpName = rcfg.nextScratchName()
+
+    // sort buffer
+    // use Java's in-place sort
+    java.util.Arrays.sort(buffer.asInstanceOf[Array[java.lang.Object]], 0, count)
     
     // put up to count things
     val fp = encoding.getWriter[T](tmpName)
@@ -96,9 +116,9 @@ class SortedNode[T <:Encodable :ClassTag](val child: Node[T], val encoding: Prot
     count = 0
   }
 
-  def deleteBuffers() {
+  def deleteFiles(names: Set[String]) {
     //TODO
-    //diskBuffers.foreach(path => (new java.io.File(path)).delete() )
+    //names.foreach(path => (new java.io.File(path)).delete() )
   }
 
   def process(next: T) {
@@ -109,20 +129,53 @@ class SortedNode[T <:Encodable :ClassTag](val child: Node[T], val encoding: Prot
     count += 1
   }
 
+  //def flush() {
+  //  pushBufferToDisk()
+  //  
+  //  // turn each sorted diskBuffer into a BufferedIterator[T]
+  //  val pullStreams: Set[BufferedIterator[T]] = diskBuffers.map(encoding.getReader(_).buffered)
+
+  //  while(pullStreams.exists(_.hasNext)) {
+  //    // find the minimum of all the flows and return that
+  //    val minIter: BufferedIterator[T] = pullStreams.filter(_.hasNext).minBy(_.head)
+  //    child.process(minIter.next)
+  //  }
+
+  //  deleteBuffers()
+  //  child.flush()
+  //}
+
+  def merge(bufNames: Set[String], out: Node[T]) {
+    // turn each sorted buf into a BufferedIterator[T]
+    val pullStreams: Set[Reader[T]] = bufNames.map(encoding.getReader[T](_)) 
+    val pullIters: Set[BufferedIterator[T]] = pullStreams.map(_.buffered)
+
+    while(pullIters.exists(_.hasNext)) {
+      // find the minimum of all the flows and return that
+      val minIter: BufferedIterator[T] = pullIters.filter(_.hasNext).minBy(_.head)
+      out.process(minIter.next)
+    }
+    out.flush()
+    
+    pullStreams.foreach(_.close())
+    deleteFiles(bufNames)
+  }
+
   def flush() {
     pushBufferToDisk()
-    
-    // turn each sorted diskBuffer into a BufferedIterator[T]
-    val pullStreams = diskBuffers.map(encoding.getReader(_).buffered)
 
-    while(pullStreams.exists(_.hasNext)) {
-      // find the minimum of all the flows and return that
-      val minIter = pullStreams.filter(_.hasNext).minBy(_.head)
-      child.process(minIter.next)
+    var buffersToMerge: Set[String] = diskBuffers
+
+    while(buffersToMerge.size > MergeFileCount) {
+      buffersToMerge = buffersToMerge.grouped(MergeFileCount).map(fgrp => {
+        val scratchFile = rcfg.nextScratchName()
+        merge(fgrp.toSet, new FileNode[T](scratchFile, encoding))
+        scratchFile
+      }).toSet
     }
 
-    deleteBuffers()
-    child.flush()
+    // put the final set to the child
+    merge(buffersToMerge, child)
   }
 }
 
