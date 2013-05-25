@@ -6,13 +6,29 @@ package cerberus
 
 import cerberus.io._
 
+// TODO, make this configuration better
+class RuntimeConfig(val jobUniq: String) {
+  // for helping make files 
+  var uid = 0
+  def nextFileName() = {
+    uid += 1
+    jobUniq + "/file"+uid
+  }
+  def nextScratchFileName() = {
+    uid += 1
+    "/tmp/"+jobUniq+"/scratch"+uid
+  }
+}
+
 trait Node[T <:Encodable] {
+  def conf(cfg: RuntimeConfig): Unit
   def process(next: T): Unit
   def flush(): Unit
 }
 
 class FileNode[T <:Encodable](val path: String, val encoding: Protocol) extends Node[T] {
   val output = encoding.getWriter[T]
+  def conf(cfg: RuntimeConfig) { }
   def process(next: T) {
     output.put(next)
   }
@@ -23,16 +39,19 @@ class FileNode[T <:Encodable](val path: String, val encoding: Protocol) extends 
 }
 
 class MappedNode[A <:Encodable, B <:Encodable](val child: Node[B], oper: A=>B) extends Node[A] {
+  def conf(cfg: RuntimeConfig) = child.conf(cfg)
   def process(next: A) = child.process(oper(next))
   def flush() = child.flush()
 }
 
 class FilteredNode[T <:Encodable](val child: Node[T], oper: T=>Boolean) extends Node[T] {
+  def conf(cfg: RuntimeConfig) = child.conf(cfg)
   def process(next: A) = if(oper(next)) { child.process(next) }
   def flush() = child.flush()
 }
 
 class MultiNode[T <:Encodable](val children: Seq[Node[T]]) extends Node[T] {
+  def conf(cfg: RuntimeConfig) = children.foreach(_.conf(cfg))
   def process(next: T) = children.foreach(_.process(next))
   def flush() = children.foreach(_.flush())
 }
@@ -45,13 +64,15 @@ class SortedNode[T <:Encodable](val child: Node[T], val encoding: Protocol, val 
   // how many are in the buffer
   var count = 0 
 
-  // only one sort on this computer at a time :(
-  def nextTempName() = {
-    "/tmp/sortbuf"+diskBuffers.size
+  // save this locally
+  var rcfg: RuntimeConfig = null
+  def conf(cfg: RuntimeConfig) {
+    rcfg = cfg
+    child.conf(cfg)
   }
 
   def pushBufferToDisk() {
-    val tmpName = nextTempName()
+    val tmpName = rcfg.nextScratchFileName()
     
     // put up to count things
     val fp = encoding.getWriter[T](tmpName)
@@ -69,6 +90,7 @@ class SortedNode[T <:Encodable](val child: Node[T], val encoding: Protocol, val 
 
   def deleteBuffers() {
     //TODO
+    //diskBuffers.foreach(path => (new java.io.File(path)).delete() )
   }
 
   def process(next: T) {
@@ -78,6 +100,7 @@ class SortedNode[T <:Encodable](val child: Node[T], val encoding: Protocol, val 
     buffer(count) = next
     count += 1
   }
+
   def flush() {
     pushBufferToDisk()
     
@@ -87,8 +110,7 @@ class SortedNode[T <:Encodable](val child: Node[T], val encoding: Protocol, val 
     while(pullStreams.exists(_.hasNext)) {
       // find the minimum of all the flows and return that
       val minIter = pullStreams.filter(_.hasNext).minBy(_.head)
-      child.process(minIter.head)
-      minIter.next
+      child.process(minIter.next)
     }
 
     deleteBuffers()
