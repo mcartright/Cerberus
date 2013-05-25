@@ -7,8 +7,8 @@ package cerberus
 import cerberus.io._
 
 trait Node[T <:Encodable] {
-  def process(next: T)
-  def flush() { }
+  def process(next: T): Unit
+  def flush(): Unit
 }
 
 class FileNode[T <:Encodable](val path: String, val encoding: Protocol) extends Node[T] {
@@ -24,14 +24,17 @@ class FileNode[T <:Encodable](val path: String, val encoding: Protocol) extends 
 
 class MappedNode[A <:Encodable, B <:Encodable](val child: Node[B], oper: A=>B) extends Node[A] {
   def process(next: A) = child.process(oper(next))
+  def flush() = child.flush()
 }
 
 class FilteredNode[T <:Encodable](val child: Node[T], oper: T=>Boolean) extends Node[T] {
   def process(next: A) = if(oper(next)) { child.process(next) }
+  def flush() = child.flush()
 }
 
 class MultiNode[T <:Encodable](val children: Seq[Node[T]]) extends Node[T] {
   def process(next: T) = children.foreach(_.process(next))
+  def flush() = children.foreach(_.flush())
 }
 
 class SortedNode[T <:Encodable](val child: Node[T], val encoding: Protocol, val bufferSize: Int=8192)(implicit ord: math.Ordering[T]) {
@@ -64,6 +67,10 @@ class SortedNode[T <:Encodable](val child: Node[T], val encoding: Protocol, val 
     count = 0
   }
 
+  def deleteBuffers() {
+    //TODO
+  }
+
   def process(next: T) {
     if(count == bufferSize) {
       pushBufferToDisk()
@@ -79,21 +86,13 @@ class SortedNode[T <:Encodable](val child: Node[T], val encoding: Protocol, val 
 
     while(pullStreams.exists(_.hasNext)) {
       // find the minimum of all the flows and return that
-      var bestIdx = -1
-      var bestVal: T = inputs.find(_.hasNext).get.head
-      
-      (0 until inputs.size).foreach(idx => {
-        if(inputs(idx).hasNext) {
-          if(bestIdx == -1 || ord.lt(inputs(idx).head, bestVal)) {
-            bestIdx = idx
-            bestVal = inputs(idx).head
-          }
-        }
-      })
-
-      child.process(bestVal)
-      inputs(bestIdx).next
+      val minIter = pullStreams.filter(_.hasNext).minBy(_.head)
+      child.process(minIter.head)
+      minIter.next
     }
+
+    deleteBuffers()
+    child.flush()
   }
 }
 
