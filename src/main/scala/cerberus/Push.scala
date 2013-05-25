@@ -44,6 +44,14 @@ class MappedNode[A <:Encodable, B <:Encodable](val child: Node[B], oper: A=>B) e
   def flush() = child.flush()
 }
 
+class ForeachedNode[T <:Encodable, U](val oper: T=>U) extends Node[T] {
+  def conf(cfg: RuntimeConfig) { }
+  def flush()
+  def process(next: T) {
+    oper(next)
+  }
+}
+
 class FilteredNode[T <:Encodable](val child: Node[T], oper: T=>Boolean) extends Node[T] {
   def conf(cfg: RuntimeConfig) = child.conf(cfg)
   def process(next: T) = if(oper(next)) { child.process(next) }
