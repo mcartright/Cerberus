@@ -5,6 +5,7 @@
 package cerberus
 
 import cerberus.io._
+import scala.reflect.ClassTag
 
 // TODO, make this configuration better
 class RuntimeConfig(val jobUniq: String) {
@@ -27,13 +28,12 @@ trait Node[T <:Encodable] {
 }
 
 class FileNode[T <:Encodable](val path: String, val encoding: Protocol) extends Node[T] {
-  val output = encoding.getWriter[T]
+  val output = encoding.getWriter[T](path)
   def conf(cfg: RuntimeConfig) { }
   def process(next: T) {
     output.put(next)
   }
   def flush() {
-    output.flush()
     output.close()
   }
 }
@@ -46,7 +46,7 @@ class MappedNode[A <:Encodable, B <:Encodable](val child: Node[B], oper: A=>B) e
 
 class FilteredNode[T <:Encodable](val child: Node[T], oper: T=>Boolean) extends Node[T] {
   def conf(cfg: RuntimeConfig) = child.conf(cfg)
-  def process(next: A) = if(oper(next)) { child.process(next) }
+  def process(next: T) = if(oper(next)) { child.process(next) }
   def flush() = child.flush()
 }
 
@@ -56,7 +56,7 @@ class MultiNode[T <:Encodable](val children: Seq[Node[T]]) extends Node[T] {
   def flush() = children.foreach(_.flush())
 }
 
-class SortedNode[T <:Encodable](val child: Node[T], val encoding: Protocol, val bufferSize: Int=8192)(implicit ord: math.Ordering[T]) {
+class SortedNode[T <:Encodable :ClassTag](val child: Node[T], val encoding: Protocol, val bufferSize: Int=8192)(implicit ord: math.Ordering[T]) {
   // keep up to bufferSize elements in memory at once
   val buffer = new Array[T](bufferSize)
   // fill up diskBuffers with the list of files to merge later
@@ -104,8 +104,8 @@ class SortedNode[T <:Encodable](val child: Node[T], val encoding: Protocol, val 
   def flush() {
     pushBufferToDisk()
     
-    // turn each diskBuffer into a sorted, BufferedIterator[T]
-    val pullStreams = diskBuffers.foreach(encoding.getReader).buffered
+    // turn each sorted diskBuffer into a BufferedIterator[T]
+    val pullStreams = diskBuffers.map(encoding.getReader(_).buffered)
 
     while(pullStreams.exists(_.hasNext)) {
       // find the minimum of all the flows and return that
