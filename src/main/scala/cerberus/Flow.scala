@@ -3,8 +3,6 @@ package cerberus
 import collection.{GenTraversableOnce, Seq, SeqProxy}
 import math.Ordering
 
-
-
 /** Entry point for flows.
   */
 object Flow {
@@ -16,15 +14,21 @@ object Flow {
 }
 
 trait Flow[A] {
+  protected val children = scala.collection.mutable.ListBuffer[Flow[_]]()
+  protected def replace[B](f : Flow[B]) : Flow[B] = {
+    this.children += f
+    f
+  }
+
+
   /* Methods that we would like to implement -- ordered by need/feasibility
    * LHF
-   def collect
+
    def collectFirst
    def contains
    def count
    def distinct
    def forall
-   def exists
    def find
    def isDefinedAt
    def isEmpty
@@ -44,9 +48,7 @@ trait Flow[A] {
    def apply
    def combinations
    def containsSlice
-   def drop
    def dropRight
-   def dropWhile
    def endsWith
    def flatten
    def foldLeft
@@ -98,9 +100,7 @@ trait Flow[A] {
    def startsWith(that)
    def tail
    def tails
-   def take
    def takeRight
-   def takeWhile
    def toSeq
    def union
    def zip
@@ -116,6 +116,11 @@ trait Flow[A] {
   def filterNot(p: A => Boolean): Flow[A] = filter(!p(_))
   def seq: Flow[A]
   def par: Flow[A]
+  def collect[B](pf: PartialFunction[A, B]): Flow[B]
+  def drop(n: Int): Flow[A]
+  def dropWhile(p: A => Boolean): Flow[A]
+  def take(n: Int): Flow[A]
+  def takeWhile(p: A => Boolean): Flow[A]
 }
 
 /** Represents the entry point into the graph.
@@ -129,16 +134,33 @@ trait Base[A] {
 trait Distributed[A] extends Flow[A] {
 
   // Methods
-  def map[B](f: A => B): Flow[B] = Mapped(this, f)
+  def collect[B](pf: PartialFunction[A, B]): Flow[B] =
+    replace(Collected(this, pf))
+  def drop(n: Int): Flow[A] = this.seq.drop(n)
+  def dropWhile(p: A => Boolean): Flow[A] = this.seq.dropWhile(p)
+  def map[B](f: A => B): Flow[B] = replace(Mapped(this, f))
   def flatMap[B](f: A => GenTraversableOnce[B]): Flow[B] =
-    FlatMapped(this, f)
-  def filter(p: A => Boolean): Flow[A] = Filtered(this, p)
-  def seq: Flow[A] = new Sequential[A] { val incoming = this }
+    replace(FlatMapped(this, f))
+  def filter(p: A => Boolean): Flow[A] = replace(Filtered(this, p))
+  def seq: Flow[A] = replace(new Sequential[A] { val incoming = this })
   def par: Flow[A] = this
-  def sorted[B >: A](implicit ord: Ordering[B]): Flow[A] =
-    this.seq.sorted(ord)
+  def foreach(f: A => Unit): Unit = {
+    val child = Foreached(this, f)
+    children.append(child)
+  }
+
+  // For now, these convert to sequential then perform the operation
+  def sorted[B >: A](implicit ord: Ordering[B]): Flow[A] = this.seq.sorted(ord)
+  def take(n: Int): Flow[A] = this.seq.take(n)
+  def takeWhile(p: A => Boolean): Flow[A] = this.seq.takeWhile(p)
 
   // the implementing classes
+  case class Collected[B](val incoming: Flow[A], val pf: PartialFunction[A, B])
+       extends Distributed[B]
+
+  case class Foreached(val incoming: Flow[A], val f: A => Unit)
+       extends Distributed[A]
+
   case class Mapped[B](val incoming: Flow[A], val f: A => B)
       extends Distributed[B]
 
@@ -156,16 +178,45 @@ trait Distributed[A] extends Flow[A] {
 trait Sequential[A] extends Flow[A] {
 
   // Methods
-  def map[B](f: A => B): Flow[B] = Mapped(this, f)
+  def collect[B](pf: PartialFunction[A, B]): Flow[B] =
+    replace(Collected(this, pf))
+  def drop(n: Int): Flow[A] = replace(Dropped(this, n))
+  def dropWhile(p: A => Boolean): Flow[A] = replace(DroppedWhile(this, p))
+  def map[B](f: A => B): Flow[B] = replace(Mapped(this, f))
   def flatMap[B](f: A => GenTraversableOnce[B]): Flow[B] =
-    FlatMapped(this, f)
-  def filter(p: A => Boolean): Flow[A] = Filtered(this, p)
-  def par: Flow[A] = new Distributed[A] { val incoming = this }
+    replace(FlatMapped(this, f))
+  def filter(p: A => Boolean): Flow[A] = replace(Filtered(this, p))
+  def par: Flow[A] = replace(new Distributed[A] { val incoming = this })
   def sorted[B >: A](implicit ord: Ordering[B]): Flow[A] =
-    new Sorted(this, ord)
+    replace(new Sorted(this, ord))
   def seq: Flow[A] = this
+  def foreach(f: A => Unit): Unit = {
+    val child = Foreached(this, f)
+    children.append(child)
+  }
+
+  def take(n: Int): Flow[A] = replace(Taken(this, n))
+  def takeWhile(p: A => Boolean): Flow[A] = replace(TakenWhile(this, p))
 
   // the implementing classes
+  case class Dropped(val incoming: Flow[A], val n: Int)
+       extends Sequential[A]
+
+  case class DroppedWhile(val incoming: Flow[A], val p: A => Boolean)
+       extends Sequential[A]
+
+  case class Collected[B](val incoming: Flow[A], val pf: PartialFunction[A, B])
+       extends Sequential[B]
+
+  case class TakenWhile(val incoming: Flow[A], val p: A => Boolean)
+  extends Sequential[A]
+
+  case class Taken(val incoming: Flow[A], val n: Int)
+       extends Sequential[A]
+
+  case class Foreached(val incoming: Flow[A], val f: A => Unit)
+       extends Sequential[A]
+
   case class Mapped[B](val incoming: Flow[A], val f: A => B)
       extends Sequential[B]
 
