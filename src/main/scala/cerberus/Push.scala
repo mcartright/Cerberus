@@ -46,7 +46,7 @@ class MappedNode[A <:Encodable, B <:Encodable](val child: Node[B], oper: A=>B) e
 
 class ForeachedNode[T <:Encodable, U](val oper: T=>U) extends Node[T] {
   def conf(cfg: RuntimeConfig) { }
-  def flush()
+  def flush() { }
   def process(next: T) {
     oper(next)
   }
