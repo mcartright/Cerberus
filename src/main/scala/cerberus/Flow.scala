@@ -3,8 +3,6 @@ package cerberus
 import collection.{GenTraversableOnce, Seq, SeqProxy}
 import math.Ordering
 
-
-
 /** Entry point for flows.
   */
 object Flow {
@@ -16,6 +14,13 @@ object Flow {
 }
 
 trait Flow[A] {
+  protected val children = scala.collection.mutable.ListBuffer[Flow[_]]()
+  protected def replace[B](f : Flow[B]) : Flow[B] = {
+    this.children += f
+    f
+  }
+
+
   /* Methods that we would like to implement -- ordered by need/feasibility
    * LHF
    def collect
@@ -129,16 +134,24 @@ trait Base[A] {
 trait Distributed[A] extends Flow[A] {
 
   // Methods
-  def map[B](f: A => B): Flow[B] = Mapped(this, f)
+  def map[B](f: A => B): Flow[B] = replace(Mapped(this, f))
   def flatMap[B](f: A => GenTraversableOnce[B]): Flow[B] =
-    FlatMapped(this, f)
-  def filter(p: A => Boolean): Flow[A] = Filtered(this, p)
-  def seq: Flow[A] = new Sequential[A] { val incoming = this }
+    replace(FlatMapped(this, f))
+  def filter(p: A => Boolean): Flow[A] = replace(Filtered(this, p))
+  def seq: Flow[A] = replace(new Sequential[A] { val incoming = this })
   def par: Flow[A] = this
   def sorted[B >: A](implicit ord: Ordering[B]): Flow[A] =
-    this.seq.sorted(ord)
+    replace(this.seq.sorted(ord))
+
+  def foreach(f: A => Unit): Unit = {
+    val child = Foreached(this, f)
+    children.append(child)
+  }
 
   // the implementing classes
+  case class Foreached(val incoming: Flow[A], val f: A => Unit)
+       extends Distributed[A]
+
   case class Mapped[B](val incoming: Flow[A], val f: A => B)
       extends Distributed[B]
 
@@ -156,16 +169,25 @@ trait Distributed[A] extends Flow[A] {
 trait Sequential[A] extends Flow[A] {
 
   // Methods
-  def map[B](f: A => B): Flow[B] = Mapped(this, f)
+  def map[B](f: A => B): Flow[B] = replace(Mapped(this, f))
   def flatMap[B](f: A => GenTraversableOnce[B]): Flow[B] =
-    FlatMapped(this, f)
-  def filter(p: A => Boolean): Flow[A] = Filtered(this, p)
-  def par: Flow[A] = new Distributed[A] { val incoming = this }
+    replace(FlatMapped(this, f))
+  def filter(p: A => Boolean): Flow[A] = replace(Filtered(this, p))
+  def par: Flow[A] = replace(new Distributed[A] { val incoming = this })
   def sorted[B >: A](implicit ord: Ordering[B]): Flow[A] =
-    new Sorted(this, ord)
+    replace(new Sorted(this, ord))
+
   def seq: Flow[A] = this
 
+  def foreach(f: A => Unit): Unit = {
+    val child = Foreached(this, f)
+    children.append(child)
+  }
+
   // the implementing classes
+  case class Foreached(val incoming: Flow[A], val f: A => Unit)
+       extends Sequential[A]
+
   case class Mapped[B](val incoming: Flow[A], val f: A => B)
       extends Sequential[B]
 
