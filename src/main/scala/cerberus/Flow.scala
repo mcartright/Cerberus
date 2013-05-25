@@ -29,7 +29,7 @@ trait Flow[A] {
    def count
    def distinct
    def forall
-   def exists
+
    def find
    def isDefinedAt
    def isEmpty
@@ -103,9 +103,7 @@ trait Flow[A] {
    def startsWith(that)
    def tail
    def tails
-   def take
    def takeRight
-   def takeWhile
    def toSeq
    def union
    def zip
@@ -121,6 +119,8 @@ trait Flow[A] {
   def filterNot(p: A => Boolean): Flow[A] = filter(!p(_))
   def seq: Flow[A]
   def par: Flow[A]
+  def take(n: Int): Flow[A]
+  def takeWhile(p: A => Boolean): Flow[A]
 }
 
 /** Represents the entry point into the graph.
@@ -140,13 +140,15 @@ trait Distributed[A] extends Flow[A] {
   def filter(p: A => Boolean): Flow[A] = replace(Filtered(this, p))
   def seq: Flow[A] = replace(new Sequential[A] { val incoming = this })
   def par: Flow[A] = this
-  def sorted[B >: A](implicit ord: Ordering[B]): Flow[A] =
-    replace(this.seq.sorted(ord))
-
   def foreach(f: A => Unit): Unit = {
     val child = Foreached(this, f)
     children.append(child)
   }
+
+  // For now, these convert to sequential then perform the operation
+  def sorted[B >: A](implicit ord: Ordering[B]): Flow[A] = this.seq.sorted(ord)
+  def take(n: Int): Flow[A] = this.seq.take(n)
+  def takeWhile(p: A => Boolean): Flow[A] = this.seq.takeWhile(p)
 
   // the implementing classes
   case class Foreached(val incoming: Flow[A], val f: A => Unit)
@@ -184,7 +186,16 @@ trait Sequential[A] extends Flow[A] {
     children.append(child)
   }
 
+  def take(n: Int): Flow[A] = replace(Taken(this, n))
+  def takeWhile(p: A => Boolean): Flow[A] = replace(TakenWhile(this, p))
+
   // the implementing classes
+  case class TakenWhile(val incoming: Flow[A], val p: A => Boolean)
+  extends Sequential[A]
+
+  case class Taken(val incoming: Flow[A], val n: Int)
+       extends Sequential[A]
+
   case class Foreached(val incoming: Flow[A], val f: A => Unit)
        extends Sequential[A]
 
