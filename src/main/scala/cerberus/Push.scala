@@ -6,6 +6,8 @@ package cerberus
 
 import cerberus.io._
 import scala.reflect.ClassTag
+import scala.collection.GenTraversableOnce
+import scala.math.Ordering
 
 // TODO, make this configuration better
 class RuntimeConfig(val jobUniq: String) {
@@ -43,6 +45,15 @@ class MappedNode[A <:Encodable, B <:Encodable](val child: Node[B], oper: A=>B) e
   def conf(cfg: RuntimeConfig) = child.conf(cfg)
   def process(next: A) = child.process(oper(next))
   def flush() = child.flush()
+}
+
+class FlatMappedNode[A <:Encodable, B<:Encodable](val child: Node[B], val oper: A=>GenTraversableOnce[B]) extends Node[A] {
+  def conf(cfg: RuntimeConfig) = child.conf(cfg)
+  def flush() = child.flush()
+
+  def process(next: A) = {
+    oper(next).foreach(child.process(_))
+  }
 }
 
 class ForeachedNode[T <:Encodable, U](val oper: T=>U) extends Node[T] {
@@ -88,7 +99,8 @@ class SortedNode[T <:Encodable :ClassTag](val child: Node[T], val encoding: Prot
 
     // sort buffer
     // use Java's in-place sort
-    java.util.Arrays.sort(buffer.asInstanceOf[Array[java.lang.Object]], 0, count)
+    // Scala's doesn't let you specify part of an array to sort
+    java.util.Arrays.sort(buffer.asInstanceOf[Array[java.lang.Object]], 0, count, ord.asInstanceOf[java.util.Comparator[_ >: Any]])
     
     // put up to count things
     val fp = encoding.getWriter[T](tmpName)

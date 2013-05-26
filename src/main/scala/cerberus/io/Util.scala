@@ -3,14 +3,20 @@ package cerberus.io
 object Util {
   import java.io._
   def deleteFile(path: String) {
-    try {
-      (new File(path)).delete()
-    } catch {
-      case _: SecurityException => {
-        println("Permission error on delete")
+    if(exists(path)) {
+      try {
+        (new File(path)).delete()
+      } catch {
+        case _: SecurityException => {
+          println("Permission error on delete")
+        }
       }
     }
   }
+
+  def exists(path: String): Boolean = (new File(path)).exists()
+
+  def freeSpace(path: String) = (new File(path)).getUsableSpace
 
   def listDir(path: String): Set[String] = {
     val dir = new File(path)
