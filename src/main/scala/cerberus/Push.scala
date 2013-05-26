@@ -30,6 +30,38 @@ trait Node[T <:Encodable] {
   def flush(): Unit
 }
 
+/**
+ * Output to multiple files using a simple round-robin dispatch
+ */
+class RoundRobinDistribNode[T <:Encodable](val paths: Set[String], val encoding: Protocol) extends Node[T] {
+  val outputs = paths.map(encoding.getWriter[T](_)).toArray
+  def conf(cfg: RuntimeConfig) { }
+  def flush() {
+    outputs.foreach(_.close())
+  }
+  def process(next: T) {
+    outputs.foreach(_.put(next))
+  }
+}
+
+/**
+ * Output to multiple files using a simple .hashCode % paths.size dispatch
+ */
+class HashDistribNode[T <:Encodable](val paths: Set[String], val encoding: Protocol) extends Node[T] {
+  val outputs = paths.map(encoding.getWriter[T](_)).toArray
+  def conf(cfg: RuntimeConfig) { }
+  def flush() {
+    outputs.foreach(_.close())
+  }
+  def process(next: T) {
+    val destination = next.hashCode() % outputs.size
+    outputs(destination).put(next)
+  }
+}
+
+/**
+ * Output to a single file, using the specified encoding
+ */
 class FileNode[T <:Encodable](val path: String, val encoding: Protocol) extends Node[T] {
   val output = encoding.getWriter[T](path)
   def conf(cfg: RuntimeConfig) { }
@@ -50,7 +82,7 @@ class MappedNode[A <:Encodable, B <:Encodable](val child: Node[B], oper: A=>B) e
 class FlatMappedNode[A <:Encodable, B<:Encodable](val child: Node[B], val oper: A=>GenTraversableOnce[B]) extends Node[A] {
   def conf(cfg: RuntimeConfig) = child.conf(cfg)
   def flush() = child.flush()
-
+  
   def process(next: A) = {
     oper(next).foreach(child.process(_))
   }

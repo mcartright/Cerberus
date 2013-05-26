@@ -9,10 +9,11 @@ object App {
   
   def serializationTest() {
     val outputData = Array("Hello!", "There!")
+
     val scratchFile = cfg.nextScratchName()
     val fp = new FileNode[String](scratchFile, testEncoding)
-    outputData.foreach(fp.process(_))
-    fp.flush()
+    
+    Executor(new TraversableSource(outputData), fp).run(cfg)
 
     // since a reader is an iterator, we can slurp it into an array
     val writtenData = testEncoding.getReader[String](scratchFile).toArray
