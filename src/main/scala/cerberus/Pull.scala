@@ -33,12 +33,12 @@ trait Source[T <:Encodable] {
   def getReader(): Reader[T]
 }
 
-class FileSource[T <:Encodable](val path: String, val encoding: Protocol) extends Source[T] {
+case class FileSource[T <:Encodable](val path: String, val encoding: Protocol) extends Source[T] {
   def getReader(): Reader[T] =
     encoding.getReader[T](path)
 }
 
-class MergedFileSource[T <:Encodable](val paths: Set[String], val encoding: Protocol) extends Source[T] {
+case class MergedFileSource[T <:Encodable](val paths: Set[String], val encoding: Protocol) extends Source[T] {
   assert(paths.size != 0)
   def getReader() = new Reader[T] {
     val orderedFiles = paths.toIndexedSeq
@@ -61,7 +61,7 @@ class MergedFileSource[T <:Encodable](val paths: Set[String], val encoding: Prot
   }
 }
 
-class SortedMergeSource[T <:Encodable](val paths: Set[String], val encoding: Protocol)(implicit ord: math.Ordering[T]) extends Source[T] {
+case class SortedMergeSource[T <:Encodable](val paths: Set[String], val encoding: Protocol)(implicit ord: math.Ordering[T]) extends Source[T] {
   assert(paths.size != 0)
   def getReader() = new Reader[T] {
     // keep the files around for closing
@@ -80,7 +80,7 @@ class SortedMergeSource[T <:Encodable](val paths: Set[String], val encoding: Pro
   }
 }
 
-class TraversableSource[T <:Encodable](val seq: Seq[T]) extends Source[T] {
+case class TraversableSource[T <:Encodable](val seq: GenTraversableOnce[T]) extends Source[T] {
   def getReader ={
     val iter = seq.toIterator
     new Reader[T] {

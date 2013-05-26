@@ -35,12 +35,14 @@ trait Node[T <:Encodable] {
  */
 class RoundRobinDistribNode[T <:Encodable](val paths: Set[String], val encoding: Protocol) extends Node[T] {
   val outputs = paths.map(encoding.getWriter[T](_)).toArray
+  var nextOutput = 0
   def conf(cfg: RuntimeConfig) { }
   def flush() {
     outputs.foreach(_.close())
   }
   def process(next: T) {
-    outputs.foreach(_.put(next))
+    outputs(nextOutput).put(next)
+    nextOutput = (nextOutput + 1) % outputs.size
   }
 }
 
