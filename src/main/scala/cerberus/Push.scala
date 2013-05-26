@@ -33,9 +33,9 @@ trait Node[T <:Encodable] {
 /**
  * Output to multiple files using a simple round-robin dispatch
  */
-class RoundRobinDistribNode[T <:Encodable](val paths: Set[String], val encoding: Protocol) extends Node[T] {
-  val outputs = paths.map(encoding.getWriter[T](_)).toArray
-  var nextOutput = 0
+class RoundRobinDistribNode[T <:Encodable](val paths: Set[String])(implicit val encoding: Protocol) extends Node[T] {
+  @transient val outputs = paths.map(encoding.getWriter[T](_)).toArray
+  @transient var nextOutput = 0
   def conf(cfg: RuntimeConfig) { }
   def flush() {
     outputs.foreach(_.close())
@@ -49,8 +49,8 @@ class RoundRobinDistribNode[T <:Encodable](val paths: Set[String], val encoding:
 /**
  * Output to multiple files using a simple .hashCode % paths.size dispatch
  */
-class HashDistribNode[T <:Encodable](val paths: Set[String], val encoding: Protocol) extends Node[T] {
-  val outputs = paths.map(encoding.getWriter[T](_)).toArray
+class HashDistribNode[T <:Encodable](val paths: Set[String])(implicit val encoding: Protocol) extends Node[T] {
+  @transient val outputs = paths.map(encoding.getWriter[T](_)).toArray
   def conf(cfg: RuntimeConfig) { }
   def flush() {
     outputs.foreach(_.close())
@@ -64,8 +64,8 @@ class HashDistribNode[T <:Encodable](val paths: Set[String], val encoding: Proto
 /**
  * Output to a single file, using the specified encoding
  */
-class FileNode[T <:Encodable](val path: String, val encoding: Protocol) extends Node[T] {
-  val output = encoding.getWriter[T](path)
+class FileNode[T <:Encodable](val path: String)(implicit val encoding: Protocol) extends Node[T] {
+  @transient val output = encoding.getWriter[T](path)
   def conf(cfg: RuntimeConfig) { }
   def process(next: T) {
     output.put(next)
@@ -112,21 +112,20 @@ class MultiNode[T <:Encodable](val children: Seq[Node[T]]) extends Node[T] {
 
 class SortedNode[T <:Encodable :ClassTag](
   val child: Node[T],
-  val encoding: Protocol,
   val bufferSize: Int=8192
-)(implicit ord: math.Ordering[T]) extends Node[T] {
+)(implicit val ord: math.Ordering[T], implicit val encoding: Protocol) extends Node[T] {
   // keep up to bufferSize elements in memory at once
-  val buffer = new Array[T](bufferSize)
+  @transient val buffer = new Array[T](bufferSize)
   // fill up diskBuffers with the list of files to merge later
-  var diskBuffers = Set[String]()
+  @transient var diskBuffers = Set[String]()
   // how many are in the buffer
-  var count = 0 
+  @transient var count = 0 
 
   // merge 10 files at a time
-  val MergeFileCount = 10
+  @transient val MergeFileCount = 10
 
   // save this locally
-  var rcfg: RuntimeConfig = null
+  @transient var rcfg: RuntimeConfig = null
   def conf(cfg: RuntimeConfig) {
     rcfg = cfg
     child.conf(cfg)
@@ -190,7 +189,7 @@ class SortedNode[T <:Encodable :ClassTag](
     while(buffersToMerge.size > MergeFileCount) {
       buffersToMerge = buffersToMerge.grouped(MergeFileCount).map(fgrp => {
         val scratchFile = rcfg.nextScratchName()
-        merge(fgrp.toSet, new FileNode[T](scratchFile, encoding))
+        merge(fgrp.toSet, new FileNode[T](scratchFile))
         scratchFile
       }).toSet
     }

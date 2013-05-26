@@ -5,7 +5,6 @@ import cerberus.io._
 object App {
   type JInt = java.lang.Integer
   val cfg = new RuntimeConfig("test")
-  val testEncoding = JavaObjectProtocol()
   
   def runTest(testFn: String=>Unit) {
     val scratchFile = cfg.nextScratchName()
@@ -14,25 +13,27 @@ object App {
   }
 
   def serializationTest(scratchFile: String) {
+    implicit val encoding: Protocol = JavaObjectProtocol()
     val outputData = Array("Hello!", "There!")
     
     Executor(
       TraversableSource(outputData),
-      new FileNode[String](scratchFile, testEncoding)
+      new FileNode[String](scratchFile)
     ).run(cfg)
 
     // since a reader is an iterator, we can slurp it into an array
-    val writtenData = testEncoding.getReader[String](scratchFile).toArray
+    val writtenData = encoding.getReader[String](scratchFile).toArray
     
     assert(writtenData.sameElements(outputData))
   }
   
   def mapFilterTest(scratchFile: String) {
+    implicit val encoding: Protocol = JavaObjectProtocol()
     val inputData = (0 until 10000)
     val outputData = inputData.map(_*3).filter(_<100).toArray
     
     val stream = {
-      val writer = new FileNode[JInt](scratchFile, testEncoding)
+      val writer = new FileNode[JInt](scratchFile)
       val filterer = new FilteredNode[JInt](writer, x => x < 100)
       val mapper = new MappedNode[JInt, JInt](filterer, x => x*3)
       mapper
@@ -40,26 +41,28 @@ object App {
     Executor(TraversableSource(inputData.map(new JInt(_))), stream).run(cfg)
     
     // since a reader is an iterator, we can slurp it into an array
-    val writtenData = testEncoding.getReader[JInt](scratchFile).toArray
+    val writtenData = encoding.getReader[JInt](scratchFile).toArray
     assert(writtenData.sameElements(outputData))
   }
 
   def bigSortTest(scratchFile: String) {
+    implicit val encoding: Protocol = JavaObjectProtocol()
     val inputData = (0 until 100000).map(new JInt(_)).toArray.reverse
     
     val stream = {
-      val writer = new FileNode[JInt](scratchFile, testEncoding)
-      val sorter = new SortedNode[JInt](writer, testEncoding, 10)
+      val writer = new FileNode[JInt](scratchFile)
+      val sorter = new SortedNode[JInt](writer, 10)
       sorter
     }
     Executor(TraversableSource(inputData), stream).run(cfg)
     
     // since a reader is an iterator, we can slurp it into an array
-    val writtenData = testEncoding.getReader[JInt](scratchFile).toArray
+    val writtenData = encoding.getReader[JInt](scratchFile).toArray
     assert(writtenData.sameElements(inputData.sorted))
   }
 
   def mergeTest() {
+    implicit val encoding: Protocol = JavaObjectProtocol()
     val inputData = (0 until 100).map(new JInt(_)).toArray.reverse
     val outputData = inputData.sorted.toArray
 
@@ -71,17 +74,17 @@ object App {
     // split the input data round robin
     Executor(
       TraversableSource(inputData.toSeq),
-      new RoundRobinDistribNode[JInt](inPathNames, testEncoding)
+      new RoundRobinDistribNode[JInt](inPathNames)
     ).run(cfg)
 
     // merge simply, sorting stupidly on the single node endpoint
     Executor(
-      MergedFileSource[JInt](inPathNames, testEncoding),
-      new SortedNode[JInt](new FileNode[JInt](mergedName, testEncoding), testEncoding)
+      MergedFileSource[JInt](inPathNames),
+      new SortedNode[JInt](new FileNode[JInt](mergedName))
     ).run(cfg)
 
     // make sure that produced the right output
-    assert(outputData.deep == testEncoding.getReader[JInt](mergedName).toArray.deep)
+    assert(outputData.deep == encoding.getReader[JInt](mergedName).toArray.deep)
     // clean up intermediate file
     Util.delete(mergedName)
 
@@ -89,17 +92,17 @@ object App {
     inPathNames.zip(outPathNames).foreach {
       case(inPath, outPath) =>
         Executor(
-          FileSource[JInt](inPath, testEncoding),
-          new SortedNode[JInt](new FileNode[JInt](outPath, testEncoding), testEncoding)
+          FileSource[JInt](inPath),
+          new SortedNode[JInt](new FileNode[JInt](outPath))
         ).run(cfg)
     }
     Executor(
-      SortedMergeSource[JInt](outPathNames, testEncoding),
-      new FileNode[JInt](mergedName, testEncoding)
+      SortedMergeSource[JInt](outPathNames),
+      new FileNode[JInt](mergedName)
     ).run(cfg)
 
     // make sure that produced the right output
-    assert(outputData.deep == testEncoding.getReader[JInt](mergedName).toArray.deep)
+    assert(outputData.deep == encoding.getReader[JInt](mergedName).toArray.deep)
     
     // clean up all files
     Util.delete(mergedName)

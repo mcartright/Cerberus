@@ -33,12 +33,12 @@ trait Source[T <:Encodable] {
   def getReader(): Reader[T]
 }
 
-case class FileSource[T <:Encodable](val path: String, val encoding: Protocol) extends Source[T] {
+case class FileSource[T <:Encodable](val path: String)(implicit val encoding: Protocol) extends Source[T] {
   def getReader(): Reader[T] =
     encoding.getReader[T](path)
 }
 
-case class MergedFileSource[T <:Encodable](val paths: Set[String], val encoding: Protocol) extends Source[T] {
+case class MergedFileSource[T <:Encodable](val paths: Set[String])(implicit val encoding: Protocol) extends Source[T] {
   assert(paths.size != 0)
   def getReader() = new Reader[T] {
     val orderedFiles = paths.toIndexedSeq
@@ -61,7 +61,12 @@ case class MergedFileSource[T <:Encodable](val paths: Set[String], val encoding:
   }
 }
 
-case class SortedMergeSource[T <:Encodable](val paths: Set[String], val encoding: Protocol)(implicit ord: math.Ordering[T]) extends Source[T] {
+case class SortedMergeSource[T <:Encodable](
+  val paths: Set[String]
+)(
+  implicit val ord: math.Ordering[T],
+  implicit val encoding: Protocol
+) extends Source[T] {
   assert(paths.size != 0)
   def getReader() = new Reader[T] {
     // keep the files around for closing
