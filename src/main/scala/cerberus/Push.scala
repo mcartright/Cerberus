@@ -108,7 +108,11 @@ class MultiNode[T <:Encodable](val children: Seq[Node[T]]) extends Node[T] {
   def flush() = children.foreach(_.flush())
 }
 
-class SortedNode[T <:Encodable :ClassTag](val child: Node[T], val encoding: Protocol, val bufferSize: Int=8192)(implicit ord: math.Ordering[T]) {
+class SortedNode[T <:Encodable :ClassTag](
+  val child: Node[T],
+  val encoding: Protocol,
+  val bufferSize: Int=8192
+)(implicit ord: math.Ordering[T]) extends Node[T] {
   // keep up to bufferSize elements in memory at once
   val buffer = new Array[T](bufferSize)
   // fill up diskBuffers with the list of files to merge later

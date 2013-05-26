@@ -7,70 +7,52 @@ object App {
   val cfg = new RuntimeConfig("test")
   val testEncoding = JavaObjectProtocol()
   
-  def serializationTest() {
-    val outputData = Array("Hello!", "There!")
-
+  def runTest(testFn: String=>Unit) {
     val scratchFile = cfg.nextScratchName()
-    val fp = new FileNode[String](scratchFile, testEncoding)
+    testFn(scratchFile)
+    Util.delete(scratchFile)
+  }
+
+  def serializationTest(scratchFile: String) {
+    val outputData = Array("Hello!", "There!")
     
-    Executor(new TraversableSource(outputData), fp).run(cfg)
+    Executor(
+      new TraversableSource(outputData),
+      new FileNode[String](scratchFile, testEncoding)
+    ).run(cfg)
 
     // since a reader is an iterator, we can slurp it into an array
     val writtenData = testEncoding.getReader[String](scratchFile).toArray
-    assert(writtenData(0) == outputData(0))
-    assert(writtenData(1) == outputData(1))
+    
+    assert(writtenData.sameElements(outputData))
   }
   
-  def mapFilterTest() {
+  def mapFilterTest(scratchFile: String) {
     val inputData = (0 until 10000)
-    val scratchFile = cfg.nextScratchName()
+    val outputData = inputData.map(_*3).filter(_<100).toArray
+    
     val stream = {
       val writer = new FileNode[JInt](scratchFile, testEncoding)
       val filterer = new FilteredNode[JInt](writer, x => x < 100)
       val mapper = new MappedNode[JInt, JInt](filterer, x => x*3)
       mapper
     }
-    inputData.foreach(stream.process(_))
-    stream.flush()
+    Executor(new TraversableSource(inputData.map(new JInt(_))), stream).run(cfg)
     
     // since a reader is an iterator, we can slurp it into an array
     val writtenData = testEncoding.getReader[JInt](scratchFile).toArray
-    assert(writtenData.last == 99)
-    assert(writtenData(0) == 0)
-    assert(writtenData(1) == 3)
-    //println(writtenData.mkString(", "))
+    assert(writtenData.sameElements(outputData))
   }
 
-  def unbufferedSortTest() {
-    val inputData = (0 until 10).reverse.toArray
-    val scratchFile = cfg.nextScratchName()
-    
-    val stream = {
-      val writer = new FileNode[JInt](scratchFile, testEncoding)
-      val sorter = new SortedNode[JInt](writer, testEncoding, 11)
-      sorter
-    }
-    stream.conf(cfg)
-    inputData.foreach(stream.process(_))
-    stream.flush()
-    
-    // since a reader is an iterator, we can slurp it into an array
-    val writtenData = testEncoding.getReader[JInt](scratchFile).toArray
-    assert(writtenData.sameElements(inputData.sorted))
-  }
-
-  def bigSortTest() {
-    val inputData = (0 until 100000).toArray.reverse
-    val scratchFile = cfg.nextScratchName()
+  def bigSortTest(scratchFile: String) {
+    val inputData = (0 until 100000).map(new JInt(_)).toArray.reverse
     
     val stream = {
       val writer = new FileNode[JInt](scratchFile, testEncoding)
       val sorter = new SortedNode[JInt](writer, testEncoding, 10)
       sorter
     }
-    stream.conf(cfg)
-    inputData.foreach(stream.process(_))
-    stream.flush()
+    Executor(new TraversableSource(inputData), stream).run(cfg)
     
     // since a reader is an iterator, we can slurp it into an array
     val writtenData = testEncoding.getReader[JInt](scratchFile).toArray
@@ -78,10 +60,10 @@ object App {
   }
 
   def main(args: Array[String]) {
-    serializationTest()
-    mapFilterTest()
-    unbufferedSortTest()
-    bigSortTest()
+    runTest(serializationTest)
+    runTest(mapFilterTest)
+    runTest(bigSortTest)
+    
     println("Hello World!")
   }
 }
