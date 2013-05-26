@@ -9,28 +9,16 @@ import scala.reflect.ClassTag
 
 // TODO, make this configuration better
 class RuntimeConfig(val jobUniq: String) {
-  import java.io._
   // for helping make files 
   var uid = 0
   
-  def makeParentDirs(f: File) {
-    val parent = f.getParentFile()
-    if(parent != null) {
-      parent.mkdirs()
-    }
-  }
-  def makeParentDirs(path: String) { makeParentDirs(new File(path)) }
   def nextFileName() = {
     uid += 1
-    val path = jobUniq + "/file"+uid
-    makeParentDirs(path)
-    path
+    Util.returnPath(jobUniq + "/file"+uid)
   }
   def nextScratchName() = {
     uid += 1
-    val path = "/tmp/"+jobUniq+"/scratch"+uid
-    makeParentDirs(path)
-    path
+    Util.returnPath("/tmp/"+jobUniq+"/scratch"+uid)
   }
 }
 
@@ -117,8 +105,7 @@ class SortedNode[T <:Encodable :ClassTag](val child: Node[T], val encoding: Prot
   }
 
   def deleteFiles(names: Set[String]) {
-    //TODO
-    //names.foreach(path => (new java.io.File(path)).delete() )
+    names.foreach(path => Util.deleteFile(path))
   }
 
   def process(next: T) {
@@ -128,22 +115,6 @@ class SortedNode[T <:Encodable :ClassTag](val child: Node[T], val encoding: Prot
     buffer(count) = next
     count += 1
   }
-
-  //def flush() {
-  //  pushBufferToDisk()
-  //  
-  //  // turn each sorted diskBuffer into a BufferedIterator[T]
-  //  val pullStreams: Set[BufferedIterator[T]] = diskBuffers.map(encoding.getReader(_).buffered)
-
-  //  while(pullStreams.exists(_.hasNext)) {
-  //    // find the minimum of all the flows and return that
-  //    val minIter: BufferedIterator[T] = pullStreams.filter(_.hasNext).minBy(_.head)
-  //    child.process(minIter.next)
-  //  }
-
-  //  deleteBuffers()
-  //  child.flush()
-  //}
 
   def merge(bufNames: Set[String], out: Node[T]) {
     // turn each sorted buf into a BufferedIterator[T]
