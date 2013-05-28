@@ -12,16 +12,21 @@ import scala.collection.GenTraversableOnce
  */
 case class Executor[T <:Encodable](val src: Source[T], val pushTo: Node[T]) {
   def run(cfg: RuntimeConfig) {
+    assert(cfg != null)
+    
     // init runtime configuration of the graph
-    pushTo.conf(cfg)
+    pushTo.init(cfg)
     
     // process all the data coming from the source
     val iter: Reader[T] = src.getReader()
-    iter.foreach(pushTo.process(_))
+    while(iter.hasNext) {
+      pushTo.process(iter.next())
+    }
+    //iter.foreach(pushTo.process(_))
     iter.close()
 
-    // flush out any buffered steps
-    pushTo.flush()
+    // close out any buffered steps
+    pushTo.close()
   }
 }
 
@@ -34,8 +39,9 @@ trait Source[T <:Encodable] {
 }
 
 case class FileSource[T <:Encodable](val path: String)(implicit val encoding: Protocol) extends Source[T] {
-  def getReader(): Reader[T] =
+  def getReader(): Reader[T] = {
     encoding.getReader[T](path)
+  }
 }
 
 case class MergedFileSource[T <:Encodable](val paths: Set[String])(implicit val encoding: Protocol) extends Source[T] {
@@ -85,12 +91,18 @@ case class SortedMergeSource[T <:Encodable](
   }
 }
 
-case class TraversableSource[T <:Encodable](val seq: GenTraversableOnce[T]) extends Source[T] {
-  def getReader ={
-    val iter = seq.toIterator
+case class TraversableSource[T <:Encodable](seq: GenTraversableOnce[T]) extends Source[T] {
+  val data = seq.toIndexedSeq
+  val len = data.size
+  def getReader = {
     new Reader[T] {
-      def hasNext = iter.hasNext
-      def next() = iter.next()
+      var i = 0
+      def hasNext = i < len
+      def next() = {
+        val obj = data(i)
+        i += 1
+        obj
+      }
       def close() { }
     }
   }

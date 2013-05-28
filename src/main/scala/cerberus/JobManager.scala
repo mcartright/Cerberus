@@ -16,13 +16,13 @@ class JobParameters extends Encodable {
 
 object JobSocket {
   def apply(address: String, port: Int) = {
-    println("JobSocket.apply("+address+","+port+")")
     new JobSocket(new Socket(InetAddress.getByName(address), port))
   }
   def apply(skt: Socket) = new JobSocket(skt)
 }
 
 class JobSocket(val socket: Socket) {
+  // the laziness prevents a deadlock by both endpoints open the same kind of stream at the same time
   lazy val in = new ObjectInputStream(new DataInputStream(socket.getInputStream()))
   lazy val out = new ObjectOutputStream(new DataOutputStream(socket.getOutputStream()))
 
@@ -32,13 +32,13 @@ class JobSocket(val socket: Socket) {
   def close() = socket.close()
 }
 
-abstract class AbstractJobStep(val inFile: String, val outFile: String) extends Encodable {
-  def run(): Int
+trait AbstractJobStep extends Encodable {
+  def run(jp: JobParameters): Int
 }
 
-class JobStep[A <: Encodable :ClassTag, B <: Encodable :ClassTag](op: A=>B, inFile: String, outFile: String) extends
-AbstractJobStep(inFile, outFile) {
-  def run(): Int = {
+class JobStep[A <: Encodable :ClassTag, B <: Encodable :ClassTag](op: A=>B, val inFile: String, val outFile: String) extends
+AbstractJobStep {
+  def run(jp: JobParameters): Int = {
     try {
       val in = JavaObjectProtocol().getReader[A](inFile)
       val out = JavaObjectProtocol().getWriter[B](outFile)
@@ -55,25 +55,52 @@ AbstractJobStep(inFile, outFile) {
   }
 }
 
-object JobTest {
-  def main(args: Array[String]) {
-    val server = new ServerSocket(0)
-    val port = server.getLocalPort
+class ExecutorStep[T <:Encodable](
+  val src: Source[T],
+  val node: Node[T],
+  val name: String
+) extends AbstractJobStep {
+  def run(jp: JobParameters): Int = {
+    println("Running "+name)
+    // swap our output to a job-specific file
+    System.setOut(new PrintStream(new FileOutputStream(name+"-stdout")));
+    System.setErr(new PrintStream(new FileOutputStream(name+"-stderr")));
+    println("Runing "+name+" io")
+    println(src)
+    println(node)
+    
+    Executor(src, node).run(new RuntimeConfig(name))
+    
+    System.out.flush()
+    System.err.flush()
+    0
 
-    val qsub = new LocalJobService
-    val localhost = InetAddress.getLocalHost.getCanonicalHostName
+  }
+}
 
-    {
-      val wr = io.JavaObjectProtocol().getWriter[java.lang.Integer]("input.flow")
-      (0 until 10).map(new java.lang.Integer(_)).foreach(wr.put)
-      wr.close()
-    }
+class JobDispatcher {
+  val server = new ServerSocket(0)
+  val port = server.getLocalPort
 
+  val qsub = new LocalJobService
+  val localhost = InetAddress.getLocalHost.getCanonicalHostName
+
+  def run[T <:Encodable](src: Source[T], node: Node[T], name: String): Future[Int] = {
     val jobId = qsub.spawnJob("cerberus.JobRunner", Array(localhost, port.toString))
     println("spawned "+jobId)
 
-    val operation: (Int=>String) = _.toString
-    val res = JobRunner.dispatch(server.accept(), new JobStep(operation, "input.flow", "output.flow"))
+    JobRunner.dispatch(server.accept(), new ExecutorStep(src, node, name))
+  }
+
+  def runSync[T <:Encodable](src: Source[T], node: Node[T], name: String): Int = {
+    import scala.concurrent.duration._
+
+    val handle = run(src, node, name)
+    while(!handle.isCompleted) {
+      Time.snooze(30)
+    }
+    
+    Await.result(handle, 100.millis)
   }
 }
 
@@ -93,15 +120,15 @@ object JobRunner {
   }
 
   def main(args: Array[String]) {
-    // TODO
-    //System.setOut(new PrintStream(new FileOutputStream("stdout")));
-    //System.setErr(new PrintStream(new FileOutputStream("stderr")));
+    // until we get to the job itself, append to the stdout, stderr files
+    System.setOut(new PrintStream(new FileOutputStream("stdout",true)));
+    System.setErr(new PrintStream(new FileOutputStream("stderr",true)));
     val server = JobSocket(args(0), args(1).toInt)
 
     // begin protocol
     val params = server.read[JobParameters]
     val task = server.read[AbstractJobStep]
-    val res = new java.lang.Integer(task.run())
+    val res = new java.lang.Integer(task.run(params))
     server.write(res)
     server.close()
   }

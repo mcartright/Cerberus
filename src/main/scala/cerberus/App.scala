@@ -1,6 +1,7 @@
 package cerberus
 
 import cerberus.io._
+import cerberus.exec.Time
 
 object App {
   type JInt = java.lang.Integer
@@ -49,10 +50,9 @@ object App {
     implicit val encoding: Protocol = JavaObjectProtocol()
     val inputData = (0 until 100000).map(new JInt(_)).toArray.reverse
     
+    println(">>>>")
     val stream = {
-      val writer = new FileNode[JInt](scratchFile)
-      val sorter = new SortedNode[JInt](writer, 10)
-      sorter
+      new SortedNode[JInt](new FileNode[JInt](scratchFile), 10)
     }
     Executor(TraversableSource(inputData), stream).run(cfg)
     
@@ -71,17 +71,29 @@ object App {
     val outPathNames = inPathNames.map(_ => cfg.nextScratchName()).toSet
     val mergedName = cfg.nextScratchName()
 
+    val jobDispatch = new JobDispatcher
+
     // split the input data round robin
-    Executor(
+    jobDispatch.runSync(
       TraversableSource(inputData.toSeq),
-      new RoundRobinDistribNode[JInt](inPathNames)
-    ).run(cfg)
+      new RoundRobinDistribNode[JInt](inPathNames),
+      "split"
+    )
+   /*
+   Executor(
+     TraversableSource(inputData),
+     new RoundRobinDistribNode[JInt](inPathNames)
+   ).run(cfg)
+   */
+    
+    assert(encoding.getReader[JInt](inPathNames.head).nonEmpty)
 
     // merge simply, sorting stupidly on the single node endpoint
-    Executor(
+    jobDispatch.runSync(
       MergedFileSource[JInt](inPathNames),
-      new SortedNode[JInt](new FileNode[JInt](mergedName))
-    ).run(cfg)
+      new SortedNode[JInt](new FileNode[JInt](mergedName)),
+      "mergeStupid"
+    )
 
     // make sure that produced the right output
     assert(outputData.deep == encoding.getReader[JInt](mergedName).toArray.deep)
