@@ -27,6 +27,32 @@ class RuntimeConfig(val jobUniq: String) {
 }
 
 /**
+ * utility methods that duck types using reflection;
+ *
+ * calling init and close if they're available on function objects
+ */
+object TryInitAndClose {
+  def init(duck: Any) {
+    val methods = duck.getClass.getMethods.filter { m => 
+      m.getName.contains("init") &&
+      m.getParameterTypes.size == 0 &&
+      m.getTypeParameters.size == 0
+    }
+
+    if(methods.nonEmpty) methods.head.invoke(duck)
+  }
+  def close(duck: Any) {
+    val methods = duck.getClass.getMethods.filter { m => 
+      m.getName == "close" &&
+      m.getParameterTypes.size == 0 &&
+      m.getTypeParameters.size == 0
+    }
+
+    if(methods.nonEmpty) methods.head.invoke(duck)
+  }
+}
+
+/**
  *
  * The Node is an object that exists at build (dispatch) time
  * and at run (compute) time. 
@@ -107,15 +133,27 @@ class FileNode[T <:Encodable](val path: String)(implicit val encoding: Protocol)
   }
 }
 
-class MappedNode[A <:Encodable, B <:Encodable](val child: Node[B], oper: A=>B) extends Node[A] {
-  def init(cfg: RuntimeConfig) = child.init(cfg)
+class MappedNode[A <:Encodable, B <:Encodable](val child: Node[B], val oper: A=>B) extends Node[A] {
+  def init(cfg: RuntimeConfig) {
+    TryInitAndClose.init(oper)
+    child.init(cfg)
+  }
   def process(next: A) = child.process(oper(next))
-  def close() = child.close()
+  def close() {
+    TryInitAndClose.close(oper)
+    child.close()
+  }
 }
 
 class FlatMappedNode[A <:Encodable, B<:Encodable](val child: Node[B], val oper: A=>GenTraversableOnce[B]) extends Node[A] {
-  def init(cfg: RuntimeConfig) = child.init(cfg)
-  def close() = child.close()
+  def init(cfg: RuntimeConfig) {
+    TryInitAndClose.init(oper)
+    child.init(cfg)
+  }
+  def close() {
+    TryInitAndClose.close(oper)
+    child.close()
+  }
   
   def process(next: A) = {
     oper(next).foreach(child.process(_))
@@ -123,17 +161,27 @@ class FlatMappedNode[A <:Encodable, B<:Encodable](val child: Node[B], val oper: 
 }
 
 class ForeachedNode[T <:Encodable, U](val oper: T=>U) extends Node[T] {
-  def init(cfg: RuntimeConfig) { }
-  def close() { }
+  def init(cfg: RuntimeConfig) {
+    TryInitAndClose.init(oper)
+  }
+  def close() {
+    TryInitAndClose.close(oper)
+  }
   def process(next: T) {
     oper(next)
   }
 }
 
-class FilteredNode[T <:Encodable](val child: Node[T], oper: T=>Boolean) extends Node[T] {
-  def init(cfg: RuntimeConfig) = child.init(cfg)
+class FilteredNode[T <:Encodable](val child: Node[T], val oper: T=>Boolean) extends Node[T] {
+  def init(cfg: RuntimeConfig) {
+    TryInitAndClose.init(oper)
+    child.init(cfg)
+  }
   def process(next: T) = if(oper(next)) { child.process(next) }
-  def close() = child.close()
+  def close() {
+    TryInitAndClose.close(oper)
+    child.close()
+  }
 }
 
 class MultiNode[T <:Encodable](val children: Seq[Node[T]]) extends Node[T] {

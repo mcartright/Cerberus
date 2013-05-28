@@ -3,6 +3,16 @@ package cerberus
 import collection.{GenTraversableOnce, Seq, SeqProxy}
 import math.Ordering
 
+/**
+ * Custom subclass of Functions that allows for extra init() and close() methods
+ */
+abstract class FlowFunction[A,B] extends Function1[A,B] {
+  def init() { }
+  def close() { }
+  def apply(x: A): B
+}
+
+
 /** Entry point for flows.
   */
 object Flow {

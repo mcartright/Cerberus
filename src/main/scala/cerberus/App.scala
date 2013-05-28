@@ -3,6 +3,7 @@ package cerberus
 import cerberus.io._
 import cerberus.exec.Time
 
+
 object App {
   type JInt = java.lang.Integer
   val cfg = new RuntimeConfig("test")
@@ -27,20 +28,31 @@ object App {
     
     assert(writtenData.sameElements(outputData))
   }
-  
+
   def mapFilterTest(scratchFile: String) {
     implicit val encoding: Protocol = JavaObjectProtocol()
     val inputData = (0 until 10000)
     val outputData = inputData.map(_*3).filter(_<100).toArray
     
+    // test ad-hoc init and close handlers
+    var wasInit = false
+    var wasClosed = false
+    
     val stream = {
       val writer = new FileNode[JInt](scratchFile)
       val filterer = new FilteredNode[JInt](writer, x => x < 100)
-      val mapper = new MappedNode[JInt, JInt](filterer, x => x*3)
+      //val mapper = new MappedNode[JInt, JInt](filterer, x => x*3)
+      val mapper = new MappedNode[JInt, JInt](filterer, new FlowFunction[JInt,JInt] {
+        override def init() { wasInit = true }
+        def apply(x: JInt): JInt = x*3
+        override def close() { wasClosed = true }
+      })
       mapper
     }
     Executor(TraversableSource(inputData.map(new JInt(_))), stream).run(cfg)
-    
+
+    assert(wasInit && wasClosed)
+
     // since a reader is an iterator, we can slurp it into an array
     val writtenData = encoding.getReader[JInt](scratchFile).toArray
     assert(writtenData.sameElements(outputData))
