@@ -13,14 +13,16 @@ import scala.math.Ordering
 class RuntimeConfig(val jobUniq: String) {
   // for helping make files 
   var uid = 0
+
+  val myTempFolder = Util.mkdir("/tmp/"+jobUniq)
   
-  def nextFileName() = {
-    uid += 1
-    Util.returnPath(jobUniq + "/file"+uid)
-  }
   def nextScratchName() = {
     uid += 1
-    Util.returnPath("/tmp/"+jobUniq+"/scratch"+uid)
+    Util.generatePath(myTempFolder+"/scratch"+uid)
+  }
+
+  def deleteAllTemporaries() {
+    Util.delete(myTempFolder)
   }
 }
 
@@ -39,7 +41,7 @@ class RuntimeConfig(val jobUniq: String) {
  *
  * close() is called when all the elements have been seen
  *
- * mark data set up via init() as ``transient var foo: Type = null``
+ * mark data set up via init() as ``var foo: Type = null``
  * this way, you'll get a null error if you forget to initialize them
  *
  * note that ``@transient lazy val``s would also work, bu we decided on the
@@ -58,18 +60,15 @@ trait Node[T <:Encodable] extends Encodable {
 class RoundRobinDistribNode[T <:Encodable](val paths: Set[String])(implicit val encoding: Protocol) extends Node[T] {
   var outputs: Array[Writer[T]] = null
   var nextOutput = 0
-  var count = 0
   def init(cfg: RuntimeConfig) {
     outputs = paths.map(encoding.getWriter[T](_)).toArray
   }
   def close() {
-    println("processed "+count+" in RRDistribNode")
     outputs.foreach(_.close())
   }
   def process(next: T) {
     outputs(nextOutput).put(next)
     nextOutput = (nextOutput + 1) % outputs.size
-    count += 1
   }
 }
 
@@ -77,7 +76,7 @@ class RoundRobinDistribNode[T <:Encodable](val paths: Set[String])(implicit val 
  * Output to multiple files using a simple .hashCode % paths.size dispatch
  */
 class HashDistribNode[T <:Encodable](val paths: Set[String])(implicit val encoding: Protocol) extends Node[T] {
-  @transient var outputs: Array[Writer[T]] = null
+  var outputs: Array[Writer[T]] = null
   def init(cfg: RuntimeConfig) {
     outputs = paths.map(encoding.getWriter[T](_)).toArray
   }

@@ -5,6 +5,7 @@ import cerberus.exec._
 import java.io.{Serializable => Encodable}
 import java.io._
 import scala.concurrent._
+import scala.concurrent.duration._
 import scala.reflect.ClassTag
 import ExecutionContext.Implicits.global
 import scala.util.{Try, Success, Failure}
@@ -61,20 +62,12 @@ class ExecutorStep[T <:Encodable](
   val name: String
 ) extends AbstractJobStep {
   def run(jp: JobParameters): Int = {
-    println("Running "+name)
-    // swap our output to a job-specific file
-    System.setOut(new PrintStream(new FileOutputStream(name+"-stdout")));
-    System.setErr(new PrintStream(new FileOutputStream(name+"-stderr")));
-    println("Runing "+name+" io")
-    println(src)
-    println(node)
-    
-    Executor(src, node).run(new RuntimeConfig(name))
-    
+    val cfg = new RuntimeConfig(name)
+    Executor(src, node).run(cfg)
     System.out.flush()
     System.err.flush()
+    cfg.deleteAllTemporaries()
     0
-
   }
 }
 
@@ -92,15 +85,26 @@ class JobDispatcher {
     JobRunner.dispatch(server.accept(), new ExecutorStep(src, node, name))
   }
 
-  def runSync[T <:Encodable](src: Source[T], node: Node[T], name: String): Int = {
-    import scala.concurrent.duration._
-
+  def runSync[T <:Encodable](src: Source[T], node: Node[T], name: String): Unit = {
     val handle = run(src, node, name)
     while(!handle.isCompleted) {
       Time.snooze(30)
     }
     
-    Await.result(handle, 100.millis)
+    if(Await.result(handle, 100.millis) != 0) {
+      throw new RuntimeException("Job Step Failed")
+    }
+  }
+
+  def awaitMany(jobs: Set[Future[Int]]) {
+    while(jobs.exists(!_.isCompleted)) {
+      Time.snooze(30)
+    }
+    jobs.foreach { handle =>
+      if(Await.result(handle, 100.millis) != 0) {
+        throw new RuntimeException("Job Step Failed")
+      }
+    }
   }
 }
 
@@ -121,8 +125,8 @@ object JobRunner {
 
   def main(args: Array[String]) {
     // until we get to the job itself, append to the stdout, stderr files
-    System.setOut(new PrintStream(new FileOutputStream("stdout",true)));
-    System.setErr(new PrintStream(new FileOutputStream("stderr",true)));
+    //System.setOut(new PrintStream(new FileOutputStream("stdout",true)));
+    //System.setErr(new PrintStream(new FileOutputStream("stderr",true)));
     val server = JobSocket(args(0), args(1).toInt)
 
     // begin protocol

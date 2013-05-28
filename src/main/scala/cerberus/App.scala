@@ -50,7 +50,6 @@ object App {
     implicit val encoding: Protocol = JavaObjectProtocol()
     val inputData = (0 until 100000).map(new JInt(_)).toArray.reverse
     
-    println(">>>>")
     val stream = {
       new SortedNode[JInt](new FileNode[JInt](scratchFile), 10)
     }
@@ -63,7 +62,7 @@ object App {
 
   def mergeTest() {
     implicit val encoding: Protocol = JavaObjectProtocol()
-    val inputData = (0 until 100).map(new JInt(_)).toArray.reverse
+    val inputData = (0 until 100000).map(new JInt(_)).toArray.reverse
     val outputData = inputData.sorted.toArray
 
     val numPaths = 10
@@ -79,12 +78,6 @@ object App {
       new RoundRobinDistribNode[JInt](inPathNames),
       "split"
     )
-   /*
-   Executor(
-     TraversableSource(inputData),
-     new RoundRobinDistribNode[JInt](inPathNames)
-   ).run(cfg)
-   */
     
     assert(encoding.getReader[JInt](inPathNames.head).nonEmpty)
 
@@ -92,7 +85,7 @@ object App {
     jobDispatch.runSync(
       MergedFileSource[JInt](inPathNames),
       new SortedNode[JInt](new FileNode[JInt](mergedName)),
-      "mergeStupid"
+      "mergeSingleNode"
     )
 
     // make sure that produced the right output
@@ -101,17 +94,22 @@ object App {
     Util.delete(mergedName)
 
     // merge in the parallel nodes and then in the sequential
-    inPathNames.zip(outPathNames).foreach {
-      case(inPath, outPath) =>
-        Executor(
+    val mergeJobs = inPathNames.zip(outPathNames).zipWithIndex.map {
+      case ((inPath, outPath),idx) => {
+        jobDispatch.run(
           FileSource[JInt](inPath),
-          new SortedNode[JInt](new FileNode[JInt](outPath))
-        ).run(cfg)
+          new SortedNode[JInt](new FileNode[JInt](outPath)),
+          "merge-"+idx
+        )
+      }
     }
-    Executor(
+    jobDispatch.awaitMany(mergeJobs.toSet)
+
+    jobDispatch.runSync(
       SortedMergeSource[JInt](outPathNames),
-      new FileNode[JInt](mergedName)
-    ).run(cfg)
+      new FileNode[JInt](mergedName),
+      "merge-of-sorted"
+    )
 
     // make sure that produced the right output
     assert(outputData.deep == encoding.getReader[JInt](mergedName).toArray.deep)

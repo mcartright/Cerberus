@@ -53,7 +53,12 @@ object Util {
     makeParentDirs(new File(path))
   }
 
-  def returnPath(path: String): String = {
+  def mkdir(path: String): String = {
+    (new File(path)).mkdirs()
+    path
+  }
+
+  def generatePath(path: String): String = {
     makeParentDirs(path)
     path
   }
