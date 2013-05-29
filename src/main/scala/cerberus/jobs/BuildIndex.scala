@@ -133,6 +133,8 @@ object BuildIndex {
       "count"
     )
 
+    assert(countedFiles.exists(fp => encoding.getReader[CountedSplit](fp).nonEmpty))
+
     // OffsetSplitter
     //val shifted = counted.seq.map(offset)
     val shiftedFiles = (0 until distrib).map(_ => cfg.nextScratchName()).toSet
@@ -141,6 +143,7 @@ object BuildIndex {
       new MappedNode[CountedSplit, OffsetSplit](new RoundRobinDistribNode[OffsetSplit](shiftedFiles), offset),
       "shift"
     )
+    assert(shiftedFiles.forall(fp => encoding.getReader[OffsetSplit](fp).nonEmpty))
 
     // Three transformations in a row!
     // ParserSelector/UniversalParser & TagTokenizer & A lemmatizer
@@ -244,7 +247,7 @@ object BuildIndex {
   def main(args: Array[String]) {
     testSerializable(offset)(JavaObjectProtocol())
     testSerializable(new LengthsWriter("/tmp/"))(JavaObjectProtocol())
-    runLocally(Seq("data/test1","data/test2"), "locally-built-index/")
+    //runLocally(Seq("data/test1","data/test2"), "locally-built-index/")
     runForked(Seq("data/test1","data/test2"), "fork-built-index/")
   }
 }
