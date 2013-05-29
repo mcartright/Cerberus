@@ -149,7 +149,7 @@ object BuildIndex {
     val shiftedFiles = (0 until distrib).map(_ => cfg.nextScratchName()).toSet
     jobDispatch.runSync(
       MergedFileSource[CountedSplit](countedFiles),
-      new EchoNode[CountedSplit](new MappedNode[CountedSplit, OffsetSplit](new RoundRobinDistribNode[OffsetSplit](shiftedFiles), offset)),
+      new MappedNode[CountedSplit, OffsetSplit](new RoundRobinDistribNode[OffsetSplit](shiftedFiles), offset),
       "shift"
     )
     assert(shiftedFiles.exists(fp => encoding.getReader[OffsetSplit](fp).nonEmpty))
@@ -165,11 +165,11 @@ object BuildIndex {
     println(postingsPipes.mkString(", "))
     
     println(shiftedFiles.zip(outputNames))
-    val jobs = shiftedFiles.zip(outputNames).map {
-      case (fileInput, nameBase) => {
+    val jobs = shiftedFiles.zip(outputNames).zipWithIndex.map {
+      case ((fileInput, nameBase),idx) => {
         // build leaves first
         val multiStep = {
-          val docNums = new MappedNode[Doc,Int](new EchoNode[Int](new NullNode[Int]()), doc => doc.id)
+          val docNums = new MappedNode[Doc,Int](new EchoNode[Int](nameBase, new NullNode[Int]()), doc => doc.id)
           val genLengths = new MappedNode[Doc,IdLength](new SortedNode[IdLength](new FileNode[IdLength](nameBase+"len")),
             doc => IdLength(doc.id, doc.text.length)
           )
@@ -193,10 +193,16 @@ object BuildIndex {
           dmapper
         }
 
+        /*
+        Executor(
+          FileSource[OffsetSplit](fileInput),
+          parser
+        ).run(new RuntimeConfig("parse"))
+        */
         jobDispatch.run(
           FileSource[OffsetSplit](fileInput),
           parser,
-          "parse"
+          "parse"+idx
         )
       }
     }
@@ -222,6 +228,14 @@ object BuildIndex {
     )
 
     jobDispatch.awaitMany(Set(lengthsJob, namesJob, postingsJob))
+
+
+    val postingsToMerge = postingsPipes.map(encoding.getReader[Posting](_).map(p => (p.doc)).toSet.toArray.sorted)
+
+    postingsToMerge.foreach { arr =>
+      println(arr.mkString("Post: ",",",""))
+    }
+
   }
 
   def runLocally(files: Seq[String], dest: String) = {

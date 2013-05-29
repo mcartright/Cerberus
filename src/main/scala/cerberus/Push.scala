@@ -84,17 +84,17 @@ trait Node[T <:Encodable] extends Encodable {
 /**
  * EchoNode -- for debugging
  */
-class EchoNode[T<:Encodable](val child: Node[T]) extends Node[T] {
+class EchoNode[T<:Encodable](val id: String, val child: Node[T]) extends Node[T] {
   def init(cfg: RuntimeConfig) {
-    println("EchoNode init")
+    println("EchoNode "+id+" init")
     child.init(cfg)
   }
   def close() {
-    println("EchoNode close")
+    println("EchoNode "+id+" close")
     child.close()
   }
   def process(next: T) {
-    println("EchoNode process "+next)
+    println("EchoNode "+id+" process "+next)
     child.process(next)
   }
 }
@@ -247,9 +247,8 @@ class SortedNode[T <:Encodable :ClassTag](
   }
 
   def pushBufferToDisk() {
-    if(count == 0) {
-      return
-    }
+    assert(count != 0)
+
     val tmpName = rcfg.nextScratchName()
 
     println("SortedNode["+buffer(0).getClass.getName+"] pushBufferToDisk "+count)
@@ -305,7 +304,13 @@ class SortedNode[T <:Encodable :ClassTag](
   // this calls process on everything still stuck in its buffer,
   // and then close on its child
   def close() {
+    if(count == 0) {
+      child.close()
+      return
+    }
     pushBufferToDisk()
+
+    println("SortedNode.close "+diskBuffers.mkString(", "))
 
     var buffersToMerge: Set[String] = diskBuffers
 
