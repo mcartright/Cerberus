@@ -125,8 +125,8 @@ object JobRunner {
 
   def main(args: Array[String]) {
     // until we get to the job itself, append to the stdout, stderr files
-    //System.setOut(new PrintStream(new FileOutputStream("stdout",true)));
-    //System.setErr(new PrintStream(new FileOutputStream("stderr",true)));
+    System.setOut(new PrintStream(new FileOutputStream("stdout",true)));
+    System.setErr(new PrintStream(new FileOutputStream("stderr",true)));
     val server = JobSocket(args(0), args(1).toInt)
 
     // begin protocol

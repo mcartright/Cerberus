@@ -3,6 +3,8 @@ package cerberus
 import cerberus.io._
 import cerberus.exec.Time
 
+case class FooBar(foo: String, bar: java.lang.Integer) extends Encodable {
+}
 
 object App {
   type JInt = java.lang.Integer
@@ -26,6 +28,22 @@ object App {
     // since a reader is an iterator, we can slurp it into an array
     val writtenData = encoding.getReader[String](scratchFile).toArray
     
+    assert(writtenData.sameElements(outputData))
+  }
+
+  def caseClassTest(scratchFile: String) {
+    implicit val encoding: Protocol = JavaObjectProtocol()
+    val outputData = Array(FooBar("alpha",1), FooBar("beta",2))
+    
+    Executor(
+      TraversableSource(outputData),
+      new FileNode[FooBar](scratchFile)
+    ).run(cfg)
+
+    println(scratchFile)
+
+    // since a reader is an iterator, we can slurp it into an array
+    val writtenData = encoding.getReader[FooBar](scratchFile).toArray
     assert(writtenData.sameElements(outputData))
   }
 
@@ -87,7 +105,7 @@ object App {
     // split the input data round robin
     jobDispatch.runSync(
       TraversableSource(inputData.toSeq),
-      new RoundRobinDistribNode[JInt](inPathNames),
+      new MappedNode(new RoundRobinDistribNode[JInt](inPathNames), (x:JInt) => x),
       "split"
     )
     
@@ -134,6 +152,7 @@ object App {
 
   def main(args: Array[String]) {
     runTest(serializationTest)
+    runTest(caseClassTest)
     runTest(mapFilterTest)
     runTest(bigSortTest)
 

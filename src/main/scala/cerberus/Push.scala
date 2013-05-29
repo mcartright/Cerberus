@@ -15,6 +15,7 @@ class RuntimeConfig(val jobUniq: String) {
   var uid = 0
 
   val myTempFolder = Util.mkdir("/tmp/"+jobUniq)
+  println("mkdir "+myTempFolder)
   
   def nextScratchName() = {
     uid += 1
@@ -22,7 +23,7 @@ class RuntimeConfig(val jobUniq: String) {
   }
 
   def deleteAllTemporaries() {
-    Util.delete(myTempFolder)
+    //Util.delete(myTempFolder)
   }
 }
 

@@ -6,7 +6,7 @@ import math.Ordering
 /**
  * Custom subclass of Functions that allows for extra init() and close() methods
  */
-abstract class FlowFunction[A,B] extends Function1[A,B] {
+abstract class FlowFunction[A,B] extends Function1[A,B] with cerberus.io.Encodable {
   def init() { }
   def close() { }
   def apply(x: A): B
