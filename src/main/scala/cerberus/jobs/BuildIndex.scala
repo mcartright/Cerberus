@@ -29,9 +29,6 @@ case class Posting(
   def compare(that: Posting): Int = {
     var r = this.term compare that.term
     if (r != 0) return r
-    if(this.doc == that.doc) {
-      println("ERR"+(this.doc, that.doc))
-    }
     this.doc - that.doc
   }
 }
@@ -51,19 +48,14 @@ abstract class IndexWriter[T1](
 class Offsetter extends FlowFunction[CountedSplit, OffsetSplit] {
   @transient var total = 0
   def apply(cs: CountedSplit): OffsetSplit = {
-    println(total)
-    println(cs)
     val toReturn = OffsetSplit(cs.filename, cs.count, total)
-    println(toReturn)
     total += cs.count
     toReturn
   }
-  override def toString = "Offsetter total:"+total
 }
 
 class NamesWriter(path: String) extends IndexWriter[IdName](path, "names") {
   def apply(p: IdName) {
-    println(p)
     dstFile.write(s"${p.id}\t${p.name}\n")
   }
 }
@@ -97,7 +89,6 @@ object BuildIndex {
           """<DOCNO>(.+)</DOCNO""".r.findFirstMatchIn(d).get.group(1).trim
         Doc(id, name, d, Seq.empty)
     }
-    println("intoDocuments "+of+" => Seq[Doc] size="+numbered.size)
     numbered.toSeq
   }
 
@@ -110,7 +101,6 @@ object BuildIndex {
   }
   
   def getPostings(d: Doc) = {
-    println("getPostings "+d.id)
     val termPositions = d.text.zipWithIndex.groupBy(_._1)
     val postings = termPositions.keys.map { term =>
       val pos = termPositions(term).map(_._2).sorted.toArray
@@ -162,14 +152,10 @@ object BuildIndex {
     val namesPipes = outputNames.map(_+"names").toArray
     val postingsPipes = outputNames.map(_+"postings").toArray
 
-    println(postingsPipes.mkString(", "))
-    
-    println(shiftedFiles.zip(outputNames))
     val jobs = shiftedFiles.zip(outputNames).zipWithIndex.map {
       case ((fileInput, nameBase),idx) => {
         // build leaves first
         val multiStep = {
-          val docNums = new MappedNode[Doc,Int](new EchoNode[Int](nameBase, new NullNode[Int]()), doc => doc.id)
           val genLengths = new MappedNode[Doc,IdLength](new SortedNode[IdLength](new FileNode[IdLength](nameBase+"len")),
             doc => IdLength(doc.id, doc.text.length)
           )
@@ -179,11 +165,7 @@ object BuildIndex {
           val genPostings = new FlatMappedNode[Doc,Posting](new SortedNode[Posting](new FileNode[Posting](nameBase+"postings")),
             doc => getPostings(doc)
           )
-          println("Input from: "+fileInput)
-          println("Output postings to "+nameBase+"postings")
-          println("Output names to "+nameBase+"names")
-          println("Output lengths to "+nameBase+"names")
-          new MultiNode(Seq(docNums, genLengths, genNames, genPostings))
+          new MultiNode(Seq(genLengths, genNames, genPostings))
         }
 
         val parser = {
@@ -228,14 +210,6 @@ object BuildIndex {
     )
 
     jobDispatch.awaitMany(Set(lengthsJob, namesJob, postingsJob))
-
-
-    val postingsToMerge = postingsPipes.map(encoding.getReader[Posting](_).map(p => (p.doc)).toSet.toArray.sorted)
-
-    postingsToMerge.foreach { arr =>
-      println(arr.mkString("Post: ",",",""))
-    }
-
   }
 
   def runLocally(files: Seq[String], dest: String) = {

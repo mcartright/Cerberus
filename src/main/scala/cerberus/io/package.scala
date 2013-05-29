@@ -24,17 +24,16 @@ package object io {
     def close(): Unit
   }
 
+  /**
+   * Serializes and Deserializes to a bytestream for testing
+   */
   def testSerializable[T <:Encodable](before: T)(implicit encoding: Protocol) {
     val baos = new ByteArrayOutputStream()
     val wr = encoding.getWriter[T](new BinOStream(baos))
     wr.put(before)
     wr.close()
 
-    println(before)
-    
     val after = encoding.getReader[T](new BinIStream(new ByteArrayInputStream(baos.toByteArray()))).next()
-    
-    println(after)
   }
 
   /**

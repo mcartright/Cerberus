@@ -15,7 +15,6 @@ class RuntimeConfig(val jobUniq: String) {
   var uid = 0
 
   val myTempFolder = Util.mkdir("/tmp/"+jobUniq)
-  println("mkdir "+myTempFolder)
   
   def nextScratchName() = {
     uid += 1
@@ -251,7 +250,7 @@ class SortedNode[T <:Encodable :ClassTag](
 
     val tmpName = rcfg.nextScratchName()
 
-    println("SortedNode["+buffer(0).getClass.getName+"] pushBufferToDisk "+count)
+    //println("SortedNode["+buffer(0).getClass.getName+"] pushBufferToDisk "+count)
 
     // sort buffer
     // use Java's in-place sort
@@ -309,8 +308,6 @@ class SortedNode[T <:Encodable :ClassTag](
       return
     }
     pushBufferToDisk()
-
-    println("SortedNode.close "+diskBuffers.mkString(", "))
 
     var buffersToMerge: Set[String] = diskBuffers
 
