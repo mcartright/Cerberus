@@ -150,13 +150,57 @@ object App {
     outPathNames.foreach(Util.delete(_))
   }
 
-  def main(args: Array[String]) {
-    runTest(serializationTest)
-    runTest(caseClassTest)
-    runTest(mapFilterTest)
-    runTest(bigSortTest)
+  def awkwardMergeTest() {
+    implicit val encoding: Protocol = JavaObjectProtocol()
+    val jobDispatch = new JobDispatcher
 
-    mergeTest()
+    val inputA = (0 until 10).map(new JInt(_)).reverse.toArray
+    val inputB = (11 until 40).map(new JInt(_)).reverse.toArray
+    val outputData = (inputA ++ inputB).sorted.toArray
+
+    val fileA = cfg.nextScratchName()
+    val fileB = cfg.nextScratchName()
+    val fileC = cfg.nextScratchName()
+
+    // split the input data round robin
+    jobDispatch.runSync(
+      TraversableSource(inputA.toSeq),
+      new SortedNode(new FileNode[JInt](fileA)),
+      "fileA"
+    )
+    jobDispatch.runSync(
+      TraversableSource(inputB.toSeq),
+      new SortedNode(new FileNode[JInt](fileB)),
+      "fileB"
+    )
+
+    // merge simply, sorting stupidly on the single node endpoint
+    jobDispatch.runSync(
+      SortedMergeSource[JInt](Set(fileA, fileB)),
+      new FileNode[JInt](fileC),
+      "mergeAB"
+    )
+
+    val mergedData = encoding.getReader[JInt](fileC).toArray
+    println(mergedData.mkString("mergedData(",",",")"))
+
+    // make sure that produced the right output
+    assert(outputData.deep == mergedData.deep)
+    
+    // clean up all files
+    Util.delete(fileA)
+    Util.delete(fileB)
+    Util.delete(fileC)
+  }
+
+  def main(args: Array[String]) {
+    //runTest(serializationTest)
+    //runTest(caseClassTest)
+    //runTest(mapFilterTest)
+    //runTest(bigSortTest)
+
+    awkwardMergeTest()
+    //mergeTest()
     
     println("Hello World!")
   }

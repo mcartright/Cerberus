@@ -15,7 +15,7 @@ class JavaObjectReader[T <:Encodable](is: BinIStream) extends Reader[T] {
   var current = tryNext
   private def tryNext: Option[T] = try {
     val nextVal = fp.readObject.asInstanceOf[T]
-    println("JavaObjectReader.read "+nextVal)
+    //println("JavaObjectReader.read "+nextVal)
     Some(nextVal)
   } catch {
     case _: java.io.IOException => None
@@ -37,7 +37,7 @@ class JavaObjectReader[T <:Encodable](is: BinIStream) extends Reader[T] {
 class JavaObjectWriter[T <:Encodable](is: BinOStream) extends Writer[T] {
   val fp = new ObjectOutputStream(is)
   def put(obj: T) = {
-    println("JavaObjectWriter.put "+obj)
+    //println("JavaObjectWriter.put "+obj)
     fp.writeObject(obj)
   }
   def close() = fp.close()
