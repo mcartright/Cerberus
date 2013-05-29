@@ -25,9 +25,13 @@ case class Posting(
   val doc: Int,
   val positions: Array[Int]
 ) extends Ordered[Posting] with Encodable {
+  override def toString = "Posting("+term+","+doc+",Array("+positions.mkString(",")+"))"
   def compare(that: Posting): Int = {
     var r = this.term compare that.term
     if (r != 0) return r
+    if(this.doc == that.doc) {
+      println("ERR"+(this.doc, that.doc))
+    }
     this.doc - that.doc
   }
 }
@@ -47,7 +51,10 @@ abstract class IndexWriter[T1](
 class Offsetter extends FlowFunction[CountedSplit, OffsetSplit] {
   @transient var total = 0
   def apply(cs: CountedSplit): OffsetSplit = {
+    println(total)
+    println(cs)
     val toReturn = OffsetSplit(cs.filename, cs.count, total)
+    println(toReturn)
     total += cs.count
     toReturn
   }
@@ -90,6 +97,7 @@ object BuildIndex {
           """<DOCNO>(.+)</DOCNO""".r.findFirstMatchIn(d).get.group(1).trim
         Doc(id, name, d, Seq.empty)
     }
+    println("intoDocuments "+of+" => Seq[Doc] size="+numbered.size)
     numbered.toSeq
   }
 
@@ -102,6 +110,7 @@ object BuildIndex {
   }
   
   def getPostings(d: Doc) = {
+    println("getPostings "+d.id)
     val termPositions = d.text.zipWithIndex.groupBy(_._1)
     val postings = termPositions.keys.map { term =>
       val pos = termPositions(term).map(_._2).sorted.toArray
@@ -118,7 +127,7 @@ object BuildIndex {
     implicit val encoding = JavaObjectProtocol()
     val jobDispatch = new JobDispatcher
     val cfg = new RuntimeConfig("buildIndex")
-    val distrib = 10
+    val distrib = 2
 
     Util.mkdir(dest)
     
@@ -140,22 +149,27 @@ object BuildIndex {
     val shiftedFiles = (0 until distrib).map(_ => cfg.nextScratchName()).toSet
     jobDispatch.runSync(
       MergedFileSource[CountedSplit](countedFiles),
-      new MappedNode[CountedSplit, OffsetSplit](new RoundRobinDistribNode[OffsetSplit](shiftedFiles), offset),
+      new EchoNode[CountedSplit](new MappedNode[CountedSplit, OffsetSplit](new RoundRobinDistribNode[OffsetSplit](shiftedFiles), offset)),
       "shift"
     )
-    assert(shiftedFiles.forall(fp => encoding.getReader[OffsetSplit](fp).nonEmpty))
+    assert(shiftedFiles.exists(fp => encoding.getReader[OffsetSplit](fp).nonEmpty))
 
     // Three transformations in a row!
     // ParserSelector/UniversalParser & TagTokenizer & A lemmatizer
-    val outputNames = shiftedFiles.map(_ => cfg.nextScratchName()).toSet
-    val lengthsPipes = outputNames.map(_+"len")
-    val namesPipes = outputNames.map(_+"names")
-    val postingsPipes = outputNames.map(_+"postings")
+    val inputNames = shiftedFiles.toArray
+    val outputNames = inputNames.map(_ => cfg.nextScratchName()).toArray
+    val lengthsPipes = outputNames.map(_+"len").toArray
+    val namesPipes = outputNames.map(_+"names").toArray
+    val postingsPipes = outputNames.map(_+"postings").toArray
+
+    println(postingsPipes.mkString(", "))
     
+    println(shiftedFiles.zip(outputNames))
     val jobs = shiftedFiles.zip(outputNames).map {
       case (fileInput, nameBase) => {
         // build leaves first
         val multiStep = {
+          val docNums = new MappedNode[Doc,Int](new EchoNode[Int](new NullNode[Int]()), doc => doc.id)
           val genLengths = new MappedNode[Doc,IdLength](new SortedNode[IdLength](new FileNode[IdLength](nameBase+"len")),
             doc => IdLength(doc.id, doc.text.length)
           )
@@ -165,7 +179,11 @@ object BuildIndex {
           val genPostings = new FlatMappedNode[Doc,Posting](new SortedNode[Posting](new FileNode[Posting](nameBase+"postings")),
             doc => getPostings(doc)
           )
-          new MultiNode(Seq(genLengths, genNames, genPostings))
+          println("Input from: "+fileInput)
+          println("Output postings to "+nameBase+"postings")
+          println("Output names to "+nameBase+"names")
+          println("Output lengths to "+nameBase+"names")
+          new MultiNode(Seq(docNums, genLengths, genNames, genPostings))
         }
 
         val parser = {
@@ -186,19 +204,19 @@ object BuildIndex {
 
     val writeLengths = lengthsWriter(dest)
     val lengthsJob = jobDispatch.run(
-      new SortedMergeSource[IdLength](lengthsPipes),
+      new SortedMergeSource[IdLength](lengthsPipes.toSet),
       new ForeachedNode[IdLength, Unit](writeLengths),
       "lengths"
     )
     val writeNames = namesWriter(dest)
     val namesJob = jobDispatch.run(
-      new SortedMergeSource[IdName](namesPipes),
+      new SortedMergeSource[IdName](namesPipes.toSet),
       new ForeachedNode[IdName, Unit](writeNames),
       "names"
     )
     val writePostings = postingsWriter(dest)
     val postingsJob = jobDispatch.run(
-      new SortedMergeSource[Posting](postingsPipes),
+      new SortedMergeSource[Posting](postingsPipes.toSet),
       new ForeachedNode[Posting, Unit](writePostings),
       "postings"
     )

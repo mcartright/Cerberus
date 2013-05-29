@@ -53,7 +53,7 @@ case class MergedFileSource[T <:Encodable](val paths: Set[String])(implicit val 
 
     def hasNext: Boolean = {
       // if this one is done and there's another
-      if(!fp.hasNext && i < paths.size) {
+      while(!fp.hasNext && i < paths.size) {
         fp.close() // close the current
         fp = encoding.getReader[T](orderedFiles(i)) // open the next
         i+=1

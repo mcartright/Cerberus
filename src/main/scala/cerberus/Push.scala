@@ -82,6 +82,33 @@ trait Node[T <:Encodable] extends Encodable {
 }
 
 /**
+ * EchoNode -- for debugging
+ */
+class EchoNode[T<:Encodable](val child: Node[T]) extends Node[T] {
+  def init(cfg: RuntimeConfig) {
+    println("EchoNode init")
+    child.init(cfg)
+  }
+  def close() {
+    println("EchoNode close")
+    child.close()
+  }
+  def process(next: T) {
+    println("EchoNode process "+next)
+    child.process(next)
+  }
+}
+
+/**
+ * NullNode -- for debugging
+ */
+class NullNode[T<:Encodable] extends Node[T] {
+  def init(cfg: RuntimeConfig) { }
+  def process(next: T) { }
+  def close() { }
+}
+
+/**
  * Output to multiple files using a simple round-robin dispatch
  */
 class RoundRobinDistribNode[T <:Encodable](val paths: Set[String])(implicit val encoding: Protocol) extends Node[T] {
@@ -206,6 +233,8 @@ class SortedNode[T <:Encodable :ClassTag](
   var diskBuffers = Set[String]()
   // how many are in the buffer
   var count = 0 
+  // how many have passed through this node
+  var totalCount = 0
 
   def init(cfg: RuntimeConfig) {
     // setup up member variables
@@ -218,7 +247,12 @@ class SortedNode[T <:Encodable :ClassTag](
   }
 
   def pushBufferToDisk() {
+    if(count == 0) {
+      return
+    }
     val tmpName = rcfg.nextScratchName()
+
+    println("SortedNode["+buffer(0).getClass.getName+"] pushBufferToDisk "+count)
 
     // sort buffer
     // use Java's in-place sort
@@ -249,7 +283,7 @@ class SortedNode[T <:Encodable :ClassTag](
     }
     buffer(count) = next
     count += 1
-    
+    totalCount += 1
   }
 
   def merge(bufNames: Set[String], out: Node[T]) {
