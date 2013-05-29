@@ -22,7 +22,7 @@ class RuntimeConfig(val jobUniq: String) {
   }
 
   def deleteAllTemporaries() {
-    //Util.delete(myTempFolder)
+    Util.delete(myTempFolder)
   }
 }
 

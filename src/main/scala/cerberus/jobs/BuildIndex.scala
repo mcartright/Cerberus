@@ -117,7 +117,7 @@ object BuildIndex {
     implicit val encoding = JavaObjectProtocol()
     val jobDispatch = new JobDispatcher
     val cfg = new RuntimeConfig("buildIndex")
-    val distrib = 2
+    val distrib = 10
 
     Util.mkdir(dest)
     
@@ -210,6 +210,9 @@ object BuildIndex {
     )
 
     jobDispatch.awaitMany(Set(lengthsJob, namesJob, postingsJob))
+
+    // cleanup pipes
+    Set(countedFiles, shiftedFiles, lengthsPipes.toSet, namesPipes.toSet, postingsPipes.toSet).flatten.foreach(Util.delete(_))
   }
 
   def runLocally(files: Seq[String], dest: String) = {
@@ -251,8 +254,8 @@ object BuildIndex {
   }
 
   def main(args: Array[String]) {
-    testSerializable(offset)(JavaObjectProtocol())
-    testSerializable(new LengthsWriter("/tmp/"))(JavaObjectProtocol())
+    //testSerializable(offset)(JavaObjectProtocol())
+    //testSerializable(new LengthsWriter("/tmp/"))(JavaObjectProtocol())
     //runLocally(Seq("data/test1","data/test2"), "locally-built-index/")
     runForked(Seq("data/test1","data/test2"), "fork-built-index/")
   }
