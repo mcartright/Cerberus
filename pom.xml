@@ -1,7 +1,7 @@
 <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
   xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/maven-v4_0_0.xsd">
   <modelVersion>4.0.0</modelVersion>
-  
+
   <name>cerberus</name>
   <groupId>edu.umass.ciir</groupId>
   <artifactId>cerberus</artifactId>
@@ -66,6 +66,7 @@
           </execution>
         </executions>
       </plugin>
+
       <!-- build a shaded jar -->
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
@@ -91,6 +92,33 @@
         </executions>
       </plugin>
 
+     <!-- Provides deployment capability to ssh/scp remote repos -->
+     <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-deploy-plugin</artifactId>
+        <version>2.7</version>
+        <dependencies>
+          <dependency>
+            <groupId>org.apache.maven.wagon</groupId>
+            <artifactId>wagon-ssh</artifactId>
+            <version>2.4</version>
+          </dependency>
+        </dependencies>
+     </plugin>
+
     </plugins>
   </build>
+
+  <!-- Details on deployment -->
+  <distributionManagement>
+    <!-- Where can you get the deployed version of this? -->
+    <downloadUrl>http://scm-ciir.cs.umass.edu/maven</downloadUrl>
+    <!-- where are we deploying to? -->
+    <repository>
+      <id>scm-ciir</id>
+      <url>scp://scm-ciir.cs.umass.edu/var/www/lighttpd/maven</url>
+      <uniqueVersion>false</uniqueVersion>
+    </repository>
+  </distributionManagement>
+
 </project>
