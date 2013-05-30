@@ -7,56 +7,36 @@ import scala.collection.GenTraversableOnce
 import scala.collection.mutable.ArrayBuilder
 import scala.math.Ordering
 
-/**
- * Output to multiple files using a simple round-robin dispatch
+/** 
+ * Writers
+ *
  */
-class RoundRobinDistribNode[T :ClassTag](val paths: Set[String])(implicit val encoding: Protocol) extends Node[T] {
-  var outputs: Array[Writer[T]] = null
-  var nextOutput = 0
-  def init(cfg: RuntimeConfig) {
-    outputs = paths.map(encoding.getWriter[T](_)).toArray
-  }
-  def close() {
-    outputs.foreach(_.close())
-  }
-  def process(next: T) {
-    outputs(nextOutput).put(next)
-    nextOutput = (nextOutput + 1) % outputs.size
-  }
-}
-
-/**
- * Output to multiple files using a simple .hashCode % paths.size dispatch
- */
-class HashDistribNode[T :ClassTag](val paths: Set[String])(implicit val encoding: Protocol) extends Node[T] {
-  var outputs: Array[Writer[T]] = null
-  def init(cfg: RuntimeConfig) {
-    outputs = paths.map(encoding.getWriter[T](_)).toArray
-  }
-  def close() {
-    outputs.foreach(_.close())
-  }
-  def process(next: T) {
-    val destination = next.hashCode() % outputs.size
-    outputs(destination).put(next)
-  }
-}
-
-/**
- * Output to a single file, using the specified encoding
- */
-class FileNode[T :ClassTag](val path: String)(implicit val encoding: Protocol) extends Node[T] {
-  var output: Writer[T] = null
+class SplitOutputNode[T :ClassTag](val path: String)(implicit val encoding: Protocol) extends Node[T] {
+  var writer: SplitWriter[T] = null
   
   def init(cfg: RuntimeConfig) {
-    output = encoding.getWriter[T](path)
+    assert(cfg.isSplitJob) // TODO move this to compile time
+    writer = new SplitWriter(path, cfg.nodeId, cfg.numNodes)
+  }
+  def process(next: T) = writer.put(next)
+  def close() = writer.close()
+}
+
+class RoundRobinDistribOutputNode[T :ClassTag](val path: String)(implicit val encoding: Protocol) extends Node[T] {
+  var writers: IndexedSeq[SplitWriter[T]] = null
+  var nextWriter: Int = 0
+
+  def init(cfg: RuntimeConfig) {
+    writers = (0 until cfg.numNodes).map(id => new SplitWriter(path, id, cfg.numNodes))
   }
   def process(next: T) {
-    assert(output != null)
-    output.put(next)
+    writers(nextWriter).put(next)
+    nextWriter = (nextWriter+1) % writers.size
   }
   def close() {
-    output.close()
+    writers.foreach(_.close())
   }
 }
+
+//TODO HashedDistribOutputNode
 

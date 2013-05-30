@@ -14,6 +14,15 @@ object Util {
     }
   }
 
+  def abspath(path: String): String = (new File(path)).getCanonicalPath
+  def isDir(path: String): Boolean = {
+    val fp = new File(path)
+    fp.exists() && fp.isDirectory() && fp.canRead() && fp.canWrite()
+  }
+  def isFile(path: String): Boolean = {
+    val fp = new File(path)
+    fp.exists() && fp.isFile() && fp.canRead() && fp.canWrite()
+  }
   def exists(path: String): Boolean = (new File(path)).exists()
 
   def freeSpace(path: String) = (new File(path)).getUsableSpace

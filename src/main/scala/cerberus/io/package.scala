@@ -49,6 +49,19 @@ package object io {
     // concrete
     def getReader[T :ClassTag](path: String): Reader[T] = getReader(inputStream(path))
     def getWriter[T :ClassTag](path: String): Writer[T] = getWriter(outputStream(path))
+
+    // fancy
+    def writeOne[T :ClassTag](path: String, obj: T) {
+      val wr = getWriter(path)
+      wr.put(obj)
+      wr.close()
+    }
+    def readOne[T :ClassTag](path: String): T = {
+      val rdr = getReader(path)
+      val first = rdr.next()
+      rdr.close()
+      first
+    }
   }
   // TODO ThriftObjectProtocol()
 }

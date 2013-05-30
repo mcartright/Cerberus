@@ -3,7 +3,6 @@ package cerberus.exec
 import cerberus.io._
 import cerberus.service._
 
-import java.io._
 import scala.concurrent._
 import scala.concurrent.duration._
 import scala.reflect.ClassTag
@@ -14,6 +13,29 @@ trait AbstractJobStep extends Encodable {
   def id: String
   /** client-side execution */
   def run(cfg: RuntimeConfig): Int
+}
+
+/**
+ * This class is responsible for execution of a source and a graph
+ */
+case class Executor[T :ClassTag](val src: Source[T], val pushTo: Node[T]) {
+  def run(cfg: RuntimeConfig) {
+    assert(cfg != null)
+    
+    // init runtime configuration of the graph
+    pushTo.init(cfg)
+    
+    // process all the data coming from the source
+    val iter: Reader[T] = src.getReader(cfg)
+    while(iter.hasNext) {
+      pushTo.process(iter.next())
+    }
+    //iter.foreach(pushTo.process(_))
+    iter.close()
+
+    // close out any buffered steps
+    pushTo.close()
+  }
 }
 
 class ExecutorStep[T :ClassTag](

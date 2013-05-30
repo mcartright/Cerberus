@@ -4,6 +4,10 @@ import scala.reflect.ClassTag
 import java.io._
 import java.net._
 
+object Net {
+  def hostName = InetAddress.getLocalHost.getCanonicalHostName
+}
+
 object JSocket {
   def apply(address: String, port: Int) = {
     new JSocket(new Socket(InetAddress.getByName(address), port))
@@ -28,7 +32,7 @@ object JServer {
 
 class JServer(reqPort: Int) {
   val skt = new ServerSocket(reqPort)
-  def hostName = InetAddress.getLocalHost.getCanonicalHostName
+  def hostName = Net.hostName
   def port = skt.getLocalPort
   
   def accept(): JSocket = JSocket(skt.accept())
