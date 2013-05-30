@@ -2,7 +2,7 @@ package cerberus.jobs
 
 import cerberus._
 import cerberus.io._
-import scala.io.Source
+import cerberus.exec._
 import scala.math.Ordered
 import java.io._
 
@@ -76,13 +76,13 @@ class PostingsWriter(path: String) extends IndexWriter[Posting](path, "postings"
 object BuildIndex {
   val offset = new Offsetter
   def count(fn: String) = {
-    val headers = Source.fromFile(fn).getLines.filter { _ == "<DOC>" }
+    val headers = Util.fileLines(fn).filter { _ == "<DOC>" }
     CountedSplit(fn, headers.size)
   }
 
   def intoDocuments(of: OffsetSplit): Seq[Doc] = {
     val rawContent =
-      Source.fromFile(of.file).getLines.mkString("\n").split("</DOC>")
+      Util.fileLines(of.file).mkString("\n").split("</DOC>")
     val numbered = rawContent.zipWithIndex.map { case (d, i) =>
         val id = i + of.start
         val name =
@@ -115,8 +115,10 @@ object BuildIndex {
 
   def runForked(files: Seq[String], dest: String) = {
     implicit val encoding = JavaObjectProtocol()
+    implicit val conf = new SharedConfig()
+
     val jobDispatch = new JobDispatcher
-    val cfg = new RuntimeConfig("buildIndex")
+    val cfg = new RuntimeConfig("buildIndex", conf)
     val distrib = 10
 
     Util.mkdir(dest)

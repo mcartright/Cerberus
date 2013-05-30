@@ -1,4 +1,4 @@
-package cerberus.exec
+package cerberus.service
 
 trait JobService {
   val JavaBinary = sys.env.getOrElse("JAVA_HOME", "/usr")+"/bin/java"

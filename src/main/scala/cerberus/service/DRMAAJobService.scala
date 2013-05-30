@@ -1,4 +1,4 @@
-package cerberus.exec
+package cerberus.service
 
 import org.ggf.drmaa.{DrmaaException, JobTemplate, Session, SessionFactory}
 

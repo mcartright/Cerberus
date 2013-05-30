@@ -1,4 +1,4 @@
-package cerberus.exec
+package cerberus.service
 
 object Time {
   def snooze(ms: Int=1000) {

@@ -1,13 +1,16 @@
 package cerberus
 
 import cerberus.io._
-import cerberus.exec.Time
+import cerberus.exec._
+import cerberus.service.Time
 
 case class FooBar(foo: String, bar: java.lang.Integer) extends Encodable {
 }
 
 object App {
-  val cfg = new RuntimeConfig("test")
+  implicit val sharedConf = new SharedConfig
+  val cfg = new RuntimeConfig("test", sharedConf)
+
   implicit val encoding: Protocol = JavaObjectProtocol()
   
   def runTest(testFn: String=>Unit) {

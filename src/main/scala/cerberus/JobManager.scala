@@ -1,40 +1,21 @@
 package cerberus
 
 import cerberus.io._
+import cerberus.service._
 import cerberus.exec._
-import java.io.{Serializable => Encodable}
+
 import java.io._
 import scala.concurrent._
 import scala.concurrent.duration._
 import scala.reflect.ClassTag
 import ExecutionContext.Implicits.global
-import scala.util.{Try, Success, Failure}
 import java.net._
 
-class JobParameters extends Encodable {
-  val tmpDirectories = Set[String]("/tmp")
-}
-
-object JobSocket {
-  def apply(address: String, port: Int) = {
-    new JobSocket(new Socket(InetAddress.getByName(address), port))
-  }
-  def apply(skt: Socket) = new JobSocket(skt)
-}
-
-class JobSocket(val socket: Socket) {
-  // the laziness prevents a deadlock by both endpoints open the same kind of stream at the same time
-  lazy val in = new ObjectInputStream(new DataInputStream(socket.getInputStream()))
-  lazy val out = new ObjectOutputStream(new DataOutputStream(socket.getOutputStream()))
-
-  // typed read, write, close
-  def read[T <:Encodable :ClassTag]() = in.readObject().asInstanceOf[T]
-  def write[T <:Encodable :ClassTag](obj:T) = out.writeObject(obj)
-  def close() = socket.close()
-}
-
 trait AbstractJobStep extends Encodable {
-  def run(jp: JobParameters): Int
+  /** each job step needs to provide a unique id */
+  def id: String
+  /** client-side execution */
+  def run(cfg: RuntimeConfig): Int
 }
 
 class ExecutorStep[T :ClassTag](
@@ -42,31 +23,34 @@ class ExecutorStep[T :ClassTag](
   val node: Node[T],
   val name: String
 ) extends AbstractJobStep {
-  def run(jp: JobParameters): Int = {
-    val cfg = new RuntimeConfig(name)
+  def id = name
+  def run(cfg: RuntimeConfig): Int = {
     Executor(src, node).run(cfg)
-    System.out.flush()
-    System.err.flush()
     cfg.deleteAllTemporaries()
     0
   }
 }
 
 class JobDispatcher {
-  val server = new ServerSocket(0)
-  val port = server.getLocalPort
-
+  val server = JServer()
   val qsub = new LocalJobService
-  val localhost = InetAddress.getLocalHost.getCanonicalHostName
 
-  def run[T :ClassTag](src: Source[T], node: Node[T], name: String): Future[Int] = {
-    val jobId = qsub.spawnJob("cerberus.JobRunner", Array(localhost, port.toString))
+  def run[T :ClassTag](
+    src: Source[T], 
+    node: Node[T],
+    name: String
+  )(implicit conf: SharedConfig): Future[Int] = {
+    val jobId = qsub.spawnJob("cerberus.JobRunner", Array(server.hostName, server.port.toString))
     println("spawned "+jobId)
 
-    JobRunner.dispatch(server.accept(), new ExecutorStep(src, node, name))
+    JobRunner.dispatch(server.accept(), new ExecutorStep(src, node, name), conf)
   }
 
-  def runSync[T :ClassTag](src: Source[T], node: Node[T], name: String): Unit = {
+  def runSync[T :ClassTag](
+    src: Source[T],
+    node: Node[T],
+    name: String
+  )(implicit conf: SharedConfig): Unit = {
     val handle = run(src, node, name)
     while(!handle.isCompleted) {
       Time.snooze(30)
@@ -90,11 +74,9 @@ class JobDispatcher {
 }
 
 object JobRunner {
-  def dispatch(skt: Socket, task: AbstractJobStep): Future[Int] = {
-    val client = JobSocket(skt)
-
+  def dispatch(client: JSocket, task: AbstractJobStep, conf: SharedConfig): Future[Int] = {
     // begin protocol
-    client.write(new JobParameters)
+    client.write(new RuntimeConfig(task.id, conf))
     client.write(task)
 
     future { 
@@ -108,12 +90,12 @@ object JobRunner {
     // until we get to the job itself, append to the stdout, stderr files
     System.setOut(new PrintStream(new FileOutputStream("stdout",true)));
     System.setErr(new PrintStream(new FileOutputStream("stderr",true)));
-    val server = JobSocket(args(0), args(1).toInt)
+    val server = JSocket(args(0), args(1).toInt)
 
     // begin protocol
-    val params = server.read[JobParameters]
+    val cfg = server.read[RuntimeConfig]
     val task = server.read[AbstractJobStep]
-    val res = new java.lang.Integer(task.run(params))
+    val res = new java.lang.Integer(task.run(cfg))
     server.write(res)
     server.close()
   }

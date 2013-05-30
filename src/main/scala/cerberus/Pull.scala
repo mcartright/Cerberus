@@ -5,6 +5,7 @@ package cerberus
  */
 
 import cerberus.io._
+import cerberus.exec.RuntimeConfig
 import scala.reflect.ClassTag
 import scala.collection.GenTraversableOnce
 

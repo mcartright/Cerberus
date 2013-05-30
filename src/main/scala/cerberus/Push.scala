@@ -5,27 +5,12 @@
 package cerberus
 
 import cerberus.io._
+import cerberus.exec.RuntimeConfig
+
 import scala.reflect.ClassTag
 import scala.collection.GenTraversableOnce
 import scala.collection.mutable.ArrayBuilder
 import scala.math.Ordering
-
-// TODO, make this configuration better
-class RuntimeConfig(val jobUniq: String) {
-  // for helping make files 
-  var uid = 0
-
-  val myTempFolder = Util.mkdir("/tmp/"+jobUniq)
-  
-  def nextScratchName() = {
-    uid += 1
-    Util.generatePath(myTempFolder+"/scratch"+uid)
-  }
-
-  def deleteAllTemporaries() {
-    Util.delete(myTempFolder)
-  }
-}
 
 /**
  * utility methods that duck types using reflection;
