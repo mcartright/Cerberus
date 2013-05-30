@@ -1,11 +1,10 @@
-package cerberus
+package cerberus.exec
 
 /**
  * There are only a handful of Pull nodes (Source) in the execution graph, but they hand off to a Push node (Node)
  */
 
 import cerberus.io._
-import cerberus.exec.RuntimeConfig
 import scala.reflect.ClassTag
 import scala.collection.GenTraversableOnce
 

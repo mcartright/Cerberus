@@ -4,8 +4,7 @@ import cerberus.io._
 import cerberus.exec._
 import cerberus.service.Time
 
-case class FooBar(foo: String, bar: java.lang.Integer) extends Encodable {
-}
+case class FooBar(foo: String, bar: java.lang.Integer)
 
 object App {
   implicit val sharedConf = new SharedConfig
@@ -165,11 +164,13 @@ object App {
       new SortedNode(new FileNode[Int](fileA)),
       "fileA"
     )
+    println(fileA)
     jobDispatch.runSync(
       TraversableSource(inputB.toSeq),
       new SortedNode(new FileNode[Int](fileB)),
       "fileB"
     )
+    println(fileB)
 
     // merge simply, sorting stupidly on the single node endpoint
     jobDispatch.runSync(
@@ -177,6 +178,7 @@ object App {
       new FileNode[Int](fileC),
       "mergeAB"
     )
+    println(fileC)
 
     val mergedData = encoding.getReader[Int](fileC).toArray
     println(mergedData.mkString("mergedData(",",",")"))
@@ -191,12 +193,18 @@ object App {
   }
 
   def runTests() {
+    println("Serialization:")
     runTest(serializationTest)
+    println("Case Class:")
     runTest(caseClassTest)
+    println("MapFilter:")
     runTest(mapFilterTest)
+    println("BigSort:")
     runTest(bigSortTest)
 
+    println("AwkMerge:")
     awkwardMergeTest()
+    println("Merge:")
     mergeTest()
   }
 

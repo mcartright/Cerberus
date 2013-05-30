@@ -1,15 +1,13 @@
-package cerberus
+package cerberus.exec
 
 import cerberus.io._
 import cerberus.service._
-import cerberus.exec._
 
 import java.io._
 import scala.concurrent._
 import scala.concurrent.duration._
 import scala.reflect.ClassTag
 import ExecutionContext.Implicits.global
-import java.net._
 
 trait AbstractJobStep extends Encodable {
   /** each job step needs to provide a unique id */
@@ -40,7 +38,8 @@ class JobDispatcher {
     node: Node[T],
     name: String
   )(implicit conf: SharedConfig): Future[Int] = {
-    val jobId = qsub.spawnJob("cerberus.JobRunner", Array(server.hostName, server.port.toString))
+    assert(Class.forName(JobRunner.FullName) != null)
+    val jobId = qsub.spawnJob(JobRunner.FullName, Array(server.hostName, server.port.toString))
     println("spawned "+jobId)
 
     JobRunner.dispatch(server.accept(), new ExecutorStep(src, node, name), conf)
@@ -74,6 +73,7 @@ class JobDispatcher {
 }
 
 object JobRunner {
+  val FullName = "cerberus.exec.JobRunner"
   def dispatch(client: JSocket, task: AbstractJobStep, conf: SharedConfig): Future[Int] = {
     // begin protocol
     client.write(new RuntimeConfig(task.id, conf))
@@ -88,8 +88,8 @@ object JobRunner {
 
   def main(args: Array[String]) {
     // until we get to the job itself, append to the stdout, stderr files
-    System.setOut(new PrintStream(new FileOutputStream("stdout",true)));
-    System.setErr(new PrintStream(new FileOutputStream("stderr",true)));
+    //System.setOut(new PrintStream(new FileOutputStream("stdout",true)));
+    //System.setErr(new PrintStream(new FileOutputStream("stderr",true)));
     val server = JSocket(args(0), args(1).toInt)
 
     // begin protocol
