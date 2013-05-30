@@ -5,12 +5,13 @@ package cerberus
  */
 
 import cerberus.io._
+import scala.reflect.ClassTag
 import scala.collection.GenTraversableOnce
 
 /**
  * This class is responsible for execution of a source and a graph
  */
-case class Executor[T <:Encodable](val src: Source[T], val pushTo: Node[T]) {
+case class Executor[T :ClassTag](val src: Source[T], val pushTo: Node[T]) {
   def run(cfg: RuntimeConfig) {
     assert(cfg != null)
     
@@ -34,17 +35,17 @@ case class Executor[T <:Encodable](val src: Source[T], val pushTo: Node[T]) {
  * Generic interface to a Source
  * A Reader[T] is nothing more than a closeable Iterator[T]
  */
-trait Source[T <:Encodable] {
+abstract class Source[T :ClassTag] extends Encodable {
   def getReader(): Reader[T]
 }
 
-case class FileSource[T <:Encodable](val path: String)(implicit val encoding: Protocol) extends Source[T] {
+case class FileSource[T :ClassTag](val path: String)(implicit val encoding: Protocol) extends Source[T] {
   def getReader(): Reader[T] = {
     encoding.getReader[T](path)
   }
 }
 
-case class MergedFileSource[T <:Encodable](val paths: Set[String])(implicit val encoding: Protocol) extends Source[T] {
+case class MergedFileSource[T :ClassTag](val paths: Set[String])(implicit val encoding: Protocol) extends Source[T] {
   assert(paths.size != 0)
   def getReader() = new Reader[T] {
     val orderedFiles = paths.toIndexedSeq
@@ -67,7 +68,7 @@ case class MergedFileSource[T <:Encodable](val paths: Set[String])(implicit val 
   }
 }
 
-case class SortedMergeSource[T <:Encodable](
+case class SortedMergeSource[T :ClassTag](
   val paths: Set[String]
 )(
   implicit val ord: math.Ordering[T],
@@ -91,7 +92,7 @@ case class SortedMergeSource[T <:Encodable](
   }
 }
 
-case class TraversableSource[T <:Encodable](seq: GenTraversableOnce[T]) extends Source[T] {
+case class TraversableSource[T :ClassTag](seq: GenTraversableOnce[T]) extends Source[T] {
   val data = seq.toIndexedSeq
   val len = data.size
   def getReader = {

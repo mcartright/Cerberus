@@ -1,14 +1,24 @@
 package cerberus.io
 
-import java.io.{ObjectOutputStream, ObjectInputStream}
+import scala.reflect.ClassTag
+import java.io._
 
 case class JavaObjectProtocol() extends Protocol {
-  def getReader[T <:Encodable](is: BinIStream) = new JavaObjectReader(is)
-  def getWriter[T <:Encodable](os: BinOStream) = new JavaObjectWriter(os)
-  //TODO @specialized for primitives
+  def getReader[T :ClassTag](is: BinIStream): Reader[T] = {
+    val tag = implicitly[ClassTag[T]]
+    tag.runtimeClass match {
+      case _ => new JavaObjectReader[T](is)
+    }
+  }
+  def getWriter[T :ClassTag](os: BinOStream) = {
+    val tag = implicitly[ClassTag[T]]
+    tag.runtimeClass match {
+      case _ => new JavaObjectWriter[T](os)
+    }
+  }
 }
 
-class JavaObjectReader[T <:Encodable](is: BinIStream) extends Reader[T] {
+class JavaObjectReader[T](is: BinIStream) extends Reader[T] {
   val fp = new ObjectInputStream(is)
 
   // current is an option type that goes to None at the end of the valid stream
@@ -18,8 +28,7 @@ class JavaObjectReader[T <:Encodable](is: BinIStream) extends Reader[T] {
     //println("JavaObjectReader.read "+nextVal)
     Some(nextVal)
   } catch {
-    case _: java.io.IOException => None
-    case cce: ClassCastException => throw cce
+    case _: java.io.EOFException => None
   }
   
   def hasNext = current.nonEmpty
@@ -34,7 +43,7 @@ class JavaObjectReader[T <:Encodable](is: BinIStream) extends Reader[T] {
   }
 }
 
-class JavaObjectWriter[T <:Encodable](is: BinOStream) extends Writer[T] {
+class JavaObjectWriter[T](is: BinOStream) extends Writer[T] {
   val fp = new ObjectOutputStream(is)
   def put(obj: T) = {
     //println("JavaObjectWriter.put "+obj)

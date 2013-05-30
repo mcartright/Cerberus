@@ -7,6 +7,7 @@ package cerberus
 import cerberus.io._
 import scala.reflect.ClassTag
 import scala.collection.GenTraversableOnce
+import scala.collection.mutable.ArrayBuilder
 import scala.math.Ordering
 
 // TODO, make this configuration better
@@ -74,7 +75,7 @@ object TryInitAndClose {
  * explicit flow of init -> process -> process... -> close
  *
  */
-trait Node[T <:Encodable] extends Encodable {
+abstract class Node[T :ClassTag] extends Encodable {
   def init(cfg: RuntimeConfig): Unit
   def process(next: T): Unit
   def close(): Unit
@@ -83,7 +84,7 @@ trait Node[T <:Encodable] extends Encodable {
 /**
  * EchoNode -- for debugging
  */
-class EchoNode[T<:Encodable](val id: String, val child: Node[T]) extends Node[T] {
+class EchoNode[T :ClassTag](val id: String, val child: Node[T]) extends Node[T] {
   def init(cfg: RuntimeConfig) {
     println("EchoNode "+id+" init")
     child.init(cfg)
@@ -101,7 +102,7 @@ class EchoNode[T<:Encodable](val id: String, val child: Node[T]) extends Node[T]
 /**
  * NullNode -- for debugging
  */
-class NullNode[T<:Encodable] extends Node[T] {
+class NullNode[T :ClassTag] extends Node[T] {
   def init(cfg: RuntimeConfig) { }
   def process(next: T) { }
   def close() { }
@@ -110,7 +111,7 @@ class NullNode[T<:Encodable] extends Node[T] {
 /**
  * Output to multiple files using a simple round-robin dispatch
  */
-class RoundRobinDistribNode[T <:Encodable](val paths: Set[String])(implicit val encoding: Protocol) extends Node[T] {
+class RoundRobinDistribNode[T :ClassTag](val paths: Set[String])(implicit val encoding: Protocol) extends Node[T] {
   var outputs: Array[Writer[T]] = null
   var nextOutput = 0
   def init(cfg: RuntimeConfig) {
@@ -128,7 +129,7 @@ class RoundRobinDistribNode[T <:Encodable](val paths: Set[String])(implicit val 
 /**
  * Output to multiple files using a simple .hashCode % paths.size dispatch
  */
-class HashDistribNode[T <:Encodable](val paths: Set[String])(implicit val encoding: Protocol) extends Node[T] {
+class HashDistribNode[T :ClassTag](val paths: Set[String])(implicit val encoding: Protocol) extends Node[T] {
   var outputs: Array[Writer[T]] = null
   def init(cfg: RuntimeConfig) {
     outputs = paths.map(encoding.getWriter[T](_)).toArray
@@ -145,7 +146,7 @@ class HashDistribNode[T <:Encodable](val paths: Set[String])(implicit val encodi
 /**
  * Output to a single file, using the specified encoding
  */
-class FileNode[T <:Encodable](val path: String)(implicit val encoding: Protocol) extends Node[T] {
+class FileNode[T :ClassTag](val path: String)(implicit val encoding: Protocol) extends Node[T] {
   var output: Writer[T] = null
   
   def init(cfg: RuntimeConfig) {
@@ -160,7 +161,7 @@ class FileNode[T <:Encodable](val path: String)(implicit val encoding: Protocol)
   }
 }
 
-class MappedNode[A <:Encodable, B <:Encodable](val child: Node[B], val oper: A=>B) extends Node[A] {
+class MappedNode[A :ClassTag, B :ClassTag](val child: Node[B], val oper: A=>B) extends Node[A] {
   def init(cfg: RuntimeConfig) {
     TryInitAndClose.init(oper)
     child.init(cfg)
@@ -172,7 +173,7 @@ class MappedNode[A <:Encodable, B <:Encodable](val child: Node[B], val oper: A=>
   }
 }
 
-class FlatMappedNode[A <:Encodable, B<:Encodable](val child: Node[B], val oper: A=>GenTraversableOnce[B]) extends Node[A] {
+class FlatMappedNode[A :ClassTag, B :ClassTag](val child: Node[B], val oper: A=>GenTraversableOnce[B]) extends Node[A] {
   def init(cfg: RuntimeConfig) {
     TryInitAndClose.init(oper)
     child.init(cfg)
@@ -187,7 +188,7 @@ class FlatMappedNode[A <:Encodable, B<:Encodable](val child: Node[B], val oper: 
   }
 }
 
-class ForeachedNode[T <:Encodable, U](val oper: T=>U) extends Node[T] {
+class ForeachedNode[T :ClassTag, U](val oper: T=>U) extends Node[T] {
   def init(cfg: RuntimeConfig) {
     TryInitAndClose.init(oper)
   }
@@ -199,7 +200,7 @@ class ForeachedNode[T <:Encodable, U](val oper: T=>U) extends Node[T] {
   }
 }
 
-class FilteredNode[T <:Encodable](val child: Node[T], val oper: T=>Boolean) extends Node[T] {
+class FilteredNode[T :ClassTag](val child: Node[T], val oper: T=>Boolean) extends Node[T] {
   def init(cfg: RuntimeConfig) {
     TryInitAndClose.init(oper)
     child.init(cfg)
@@ -211,13 +212,13 @@ class FilteredNode[T <:Encodable](val child: Node[T], val oper: T=>Boolean) exte
   }
 }
 
-class MultiNode[T <:Encodable](val children: Seq[Node[T]]) extends Node[T] {
+class MultiNode[T :ClassTag](val children: Seq[Node[T]]) extends Node[T] {
   def init(cfg: RuntimeConfig) = children.foreach(_.init(cfg))
   def process(next: T) = children.foreach(_.process(next))
   def close() = children.foreach(_.close())
 }
 
-class SortedNode[T <:Encodable :ClassTag](
+class SortedNode[T :ClassTag](
   val child: Node[T],
   val bufferSize: Int=8192
 )(implicit val ord: math.Ordering[T], implicit val encoding: Protocol) extends Node[T] {
@@ -225,7 +226,7 @@ class SortedNode[T <:Encodable :ClassTag](
   val MergeFileCount = 10
 
   // keep up to bufferSize elements in memory at once
-  var buffer: Array[T] = null
+  var buffer: ArrayBuilder[T] = null
   // save this locally
   var rcfg: RuntimeConfig = null
   // fill up diskBuffers with the list of files to merge later
@@ -238,7 +239,11 @@ class SortedNode[T <:Encodable :ClassTag](
   def init(cfg: RuntimeConfig) {
     // setup up member variables
     rcfg = cfg
-    buffer = new Array[T](bufferSize)
+
+    //use an arraybuilder as a mutable array
+    buffer = ArrayBuilder.make()
+    buffer.sizeHint(bufferSize)
+    
     assert(buffer != null)
 
     // init my children
@@ -253,21 +258,22 @@ class SortedNode[T <:Encodable :ClassTag](
     //println("SortedNode["+buffer(0).getClass.getName+"] pushBufferToDisk "+count)
 
     // sort buffer
-    // use Java's in-place sort
-    // Scala's doesn't let you specify part of an array to sort
-    java.util.Arrays.sort(buffer.asInstanceOf[Array[java.lang.Object]], 0, count, ord.asInstanceOf[java.util.Comparator[_ >: Any]])
+    val sbuf = buffer.result().sorted
     
     // put up to count things
     val fp = encoding.getWriter[T](tmpName)
-    var idx =0
+    var idx = 0
     while(idx < count) {
-      fp.put(buffer(idx))
+      fp.put(sbuf(idx))
       idx += 1
     }
     fp.close()
     
     // keep this buffer
     diskBuffers += tmpName
+    
+    // clear buffer
+    buffer.clear()
     count = 0
   }
 
@@ -279,7 +285,7 @@ class SortedNode[T <:Encodable :ClassTag](
     if(count == bufferSize) {
       pushBufferToDisk()
     }
-    buffer(count) = next
+    buffer += next
     count += 1
     totalCount += 1
   }

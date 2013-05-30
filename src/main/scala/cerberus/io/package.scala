@@ -2,6 +2,7 @@ package cerberus
 
 package object io {
   import java.io._
+  import scala.reflect.ClassTag
   type Encodable = java.io.Serializable
   type BinIStream = java.io.DataInputStream
   type BinOStream = java.io.DataOutputStream
@@ -14,12 +15,12 @@ package object io {
     new BinOStream(new FileOutputStream(path))
   }
 
-  trait Reader[T <:Encodable] extends Iterator[T] {
+  trait Reader[T] extends Iterator[T] {
     def hasNext: Boolean
     def next(): T
     def close(): Unit
   }
-  trait Writer[T <:Encodable] {
+  trait Writer[T] {
     def put(obj: T)
     def close(): Unit
   }
@@ -27,7 +28,7 @@ package object io {
   /**
    * Serializes and Deserializes to a bytestream for testing
    */
-  def testSerializable[T <:Encodable](before: T)(implicit encoding: Protocol) {
+  def testSerializable[T :ClassTag](before: T)(implicit encoding: Protocol) {
     val baos = new ByteArrayOutputStream()
     val wr = encoding.getWriter[T](new BinOStream(baos))
     wr.put(before)
@@ -42,21 +43,13 @@ package object io {
    */
   trait Protocol {
     // abstract
-    def getReader[T <:Encodable](is: BinIStream): Reader[T]
-    def getWriter[T <:Encodable](os: BinOStream): Writer[T]
+    def getReader[T :ClassTag](is: BinIStream): Reader[T]
+    def getWriter[T :ClassTag](os: BinOStream): Writer[T]
     
     // concrete
-    def getReader[T <:Encodable](path: String): Reader[T] = getReader(inputStream(path))
-    def getWriter[T <:Encodable](path: String): Writer[T] = getWriter(outputStream(path))
+    def getReader[T :ClassTag](path: String): Reader[T] = getReader(inputStream(path))
+    def getWriter[T :ClassTag](path: String): Writer[T] = getWriter(outputStream(path))
   }
   // TODO ThriftObjectProtocol()
-
-  /**
-   * A DataFile is a path and an encoding
-   */
-  case class DataFile[T <:Encodable](path: String, encoding: Protocol=JavaObjectProtocol()) {
-    def open = encoding.getReader[T](path)
-  }
-
 }
 

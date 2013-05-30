@@ -37,26 +37,7 @@ trait AbstractJobStep extends Encodable {
   def run(jp: JobParameters): Int
 }
 
-class JobStep[A <: Encodable :ClassTag, B <: Encodable :ClassTag](op: A=>B, val inFile: String, val outFile: String) extends
-AbstractJobStep {
-  def run(jp: JobParameters): Int = {
-    try {
-      val in = JavaObjectProtocol().getReader[A](inFile)
-      val out = JavaObjectProtocol().getWriter[B](outFile)
-      
-      in.foreach(a => {
-        out.put(op(a))
-      })
-      
-      out.close()
-      return 0
-    } catch {
-      case _: Throwable => return -1
-    }
-  }
-}
-
-class ExecutorStep[T <:Encodable](
+class ExecutorStep[T :ClassTag](
   val src: Source[T],
   val node: Node[T],
   val name: String
@@ -78,14 +59,14 @@ class JobDispatcher {
   val qsub = new LocalJobService
   val localhost = InetAddress.getLocalHost.getCanonicalHostName
 
-  def run[T <:Encodable](src: Source[T], node: Node[T], name: String): Future[Int] = {
+  def run[T :ClassTag](src: Source[T], node: Node[T], name: String): Future[Int] = {
     val jobId = qsub.spawnJob("cerberus.JobRunner", Array(localhost, port.toString))
     println("spawned "+jobId)
 
     JobRunner.dispatch(server.accept(), new ExecutorStep(src, node, name))
   }
 
-  def runSync[T <:Encodable](src: Source[T], node: Node[T], name: String): Unit = {
+  def runSync[T :ClassTag](src: Source[T], node: Node[T], name: String): Unit = {
     val handle = run(src, node, name)
     while(!handle.isCompleted) {
       Time.snooze(30)
