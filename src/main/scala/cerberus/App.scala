@@ -9,6 +9,7 @@ case class FooBar(foo: String, bar: java.lang.Integer) extends Encodable {
 object App {
   type JInt = java.lang.Integer
   val cfg = new RuntimeConfig("test")
+  implicit val encoding: Protocol = JavaObjectProtocol()
   
   def runTest(testFn: String=>Unit) {
     val scratchFile = cfg.nextScratchName()
@@ -17,7 +18,6 @@ object App {
   }
 
   def serializationTest(scratchFile: String) {
-    implicit val encoding: Protocol = JavaObjectProtocol()
     val outputData = Array("Hello!", "There!")
     
     Executor(
@@ -32,7 +32,6 @@ object App {
   }
 
   def caseClassTest(scratchFile: String) {
-    implicit val encoding: Protocol = JavaObjectProtocol()
     val outputData = Array(FooBar("alpha",1), FooBar("beta",2))
     
     Executor(
@@ -48,7 +47,6 @@ object App {
   }
 
   def mapFilterTest(scratchFile: String) {
-    implicit val encoding: Protocol = JavaObjectProtocol()
     val inputData = (0 until 10000)
     val outputData = inputData.map(_*3).filter(_<100).toArray
     
@@ -77,7 +75,6 @@ object App {
   }
 
   def bigSortTest(scratchFile: String) {
-    implicit val encoding: Protocol = JavaObjectProtocol()
     val inputData = (0 until 100000).map(new JInt(_)).toArray.reverse
     
     val stream = {
@@ -91,7 +88,6 @@ object App {
   }
 
   def mergeTest() {
-    implicit val encoding: Protocol = JavaObjectProtocol()
     val inputData = (0 until 100000).map(new JInt(_)).toArray.reverse
     val outputData = inputData.sorted.toArray
 
@@ -151,7 +147,6 @@ object App {
   }
 
   def awkwardMergeTest() {
-    implicit val encoding: Protocol = JavaObjectProtocol()
     val jobDispatch = new JobDispatcher
 
     val inputA = (0 until 10).map(new JInt(_)).reverse.toArray
@@ -193,16 +188,18 @@ object App {
     Util.delete(fileC)
   }
 
-  def main(args: Array[String]) {
-    //runTest(serializationTest)
-    //runTest(caseClassTest)
-    //runTest(mapFilterTest)
-    //runTest(bigSortTest)
+  def runTests() {
+    runTest(serializationTest)
+    runTest(caseClassTest)
+    runTest(mapFilterTest)
+    runTest(bigSortTest)
 
     awkwardMergeTest()
-    //mergeTest()
-    
-    println("Hello World!")
+    mergeTest()
+  }
+
+  def main(args: Array[String]) {
+    runTests()
   }
 }
 
