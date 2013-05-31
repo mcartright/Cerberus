@@ -1,131 +1,89 @@
 package cerberus
 
-import cerberus.io.Encodable
+import cerberus.exec._
+import cerberus.io._
+import scala.reflect.ClassTag
 import collection.{GenTraversableOnce, Seq, SeqProxy}
 import math.Ordering
 
+import scala.reflect.runtime.universe._
 
-/** Entry point for flows.
-  */
-object Flow {
-  val DefaultDistrib = 10
-}
 
-abstract class Flow[A <:Encodable]() {
-  protected val children = scala.collection.mutable.ListBuffer[Flow[_ <:Encodable]]()
-  protected def returnAsChild[B <:Encodable](newChild: Flow[B]) = {
-    children += newChild
-    newChild
-  }
-  def hasChildren = children.size > 0
-  // automagically named outputs
-  protected val outputs = scala.collection.mutable.ListBuffer[String]()
-
-  //def getOutput
+class FlowGraph {
+  var nodes: Map[Int,FlowNode]
+  var edges: Set[Edge]
   
-  // override me
-  def hasParent: Boolean
-  def parent: Flow[_]
-
-  /** 
-   * defined in terms of parent if possible
-   * this is overridden in SplitFlow and MergedFlow
+  /**
+   * Anything that can be computed is a FlowNode
    */
-  def numSplits: Int = parent.numSplits
-
-  final def isParallel: Boolean = (numSplits > 1)
-  final def isSequential: Boolean = numSplits == 1
-
-  def split(n: Int) = {
-    if(n == this.numSplits) { 
-      this
-    } else {
-      returnAsChild(new SplitFlow(this, n))
-    }
+  trait FlowNode {
+    def available: Boolean
+    def done: Boolean
   }
-  def par(n: Int=10) = split(n)
-  def seq = {
-    if(isSequential) {
-      this
-    } else {
-    returnAsChild(new MergedFlow(this))
-    }
+  class FlowSource() extends FlowNode {
+    def available = true
+    def done = true
   }
-  def map[B <:Encodable](f: A=>B) = returnAsChild(new MappedFlow(this, f))
-  //def sorted[B >: A](implicit ord: Ordering[B]): Flow[A]
-}
-
-abstract class BaseFlow[A <:Encodable] extends Flow[A] {
-  def contents: GenTraversableOnce[A]
-  def hasParent = false
-  def parent = ??? //TODO exception type
-  override def numSplits = 1
-}
-class OperFlow[A <:Encodable](val source: Flow[_]) extends Flow[A] {
-  def hasParent = true
-  def parent = source
-}
-
-case class SplitFlow[A <:Encodable](src: Flow[A], val distrib: Int) extends OperFlow[A](src) {
-  assert(distrib > 1)
-  override def numSplits = distrib // Since this node changes the number of splits, we override these
-}
-case class MergedFlow[A <:Encodable](src: Flow[A]) extends OperFlow[A](src) {
-  override def numSplits = 1 // Since this node changes the number of splits, we override this
-}
-
-case class MappedFlow[A <:Encodable, B <:Encodable](src: Flow[A], val oper: A=>B) extends OperFlow[B](src)
-
-case class ForeachedFlow[A <:Encodable](src: Flow[A], val oper: A=>Unit) extends OperFlow[A](src) // Really OperFlow[Unit] but not being picky
-
-case class FlatMappedFlow[A <:Encodable, B <:Encodable](src: Flow[A], val oper: A=>GenTraversableOnce[B]) extends OperFlow[B](src)
-
-case class FilteredFlow[A <:Encodable](src: Flow[A], val pred: A=>Boolean) extends OperFlow[A](src)
-
-case class TraversableFlow[A <:Encodable](data: GenTraversableOnce[A]) extends BaseFlow[A] {
-  def contents = data
-}
-
-/*
-  // Methods
-  def collect[B](pf: PartialFunction[A, B]): Flow[B] =
-    replace(Collected(this, pf))
-  def drop(n: Int): Flow[A] = this.seq.drop(n)
-  def dropWhile(p: A => Boolean): Flow[A] = this.seq.dropWhile(p)
-  def map[B](f: A => B): Flow[B] = replace(Mapped(this, f))
-  def flatMap[B](f: A => GenTraversableOnce[B]): Flow[B] =
-    replace(FlatMapped(this, f))
-  def filter(p: A => Boolean): Flow[A] = replace(Filtered(this, p))
-  def seq: Flow[A] = replace(new Sequential[A] { val incoming = this })
-  def par: Flow[A] = this
-  def foreach(f: A => Unit): Unit = {
-    val child = Foreached(this, f)
-    children.append(child)
+  class FlowMapping() extends FlowNode { 
+    var storedPath: Option[String] = None
+    var computed = false
+    
+    def available = storedPath.isSome
+    def done = computed
+  }
+  class FlowSink() extends FlowNode {
+    var sunk = false
+    def available = true
+    def done = sunk
   }
 
-  // For now, these convert to sequential then perform the operation
-  def sorted[B >: A](implicit ord: Ordering[B]): Flow[A] = this.seq.sorted(ord)
-  def take(n: Int): Flow[A] = this.seq.take(n)
-  def takeWhile(p: A => Boolean): Flow[A] = this.seq.takeWhile(p)
+  /**
+   * Any connection is an edge
+   */
+  case class Edge(val in: Int, val out: Int)
+  // Building the graph:
 
-  // the implementing classes
-  case class Collected[B](val incoming: Flow[A], val pf: PartialFunction[A, B])
-       extends Distributed[B]
+  def addSource(): Int = {
+    val id = nodes.size
+    nodes += (id, new Source)
+    id
+  }
+  def addMapping(src: Int): Int = {
+    val id = nodes.size
+    nodes += (id, new Mapping)
 
-  case class Foreached(val incoming: Flow[A], val f: A => Unit)
-       extends Distributed[A]
+  }
 
-  case class Mapped[B](val incoming: Flow[A], val f: A => B)
-      extends Distributed[B]
+  // accessing the graph
+  def apply(id: Int): FlowNode = nodes(id)
+  def children(id: Int) = edges.filter(_.in == id).map(_.out)
+  def parent(id: Int) = edges.filter(_.out == id).map(_.in)
 
-  case class FlatMapped[B](
-    val incoming: Flow[A],
-    val f: A => GenTraversableOnce[B]
-  ) extends Distributed[B]
+  def srcs: Set[FlowNode] = nodes.filter { 
+    case _: Source => true
+    case _ => false
+  }
+  def steps: Set[FlowNode] = nodes.filter {
+    case _: Mapping => true
+    case _ => false
+  }
+  def sinks: Set[FlowNode] = nodes.filter {
+    case _: Sink => true
+    case _ => false
+  }
+}
 
-  case class Filtered[A](
-    val incoming: Flow[A],
-    val p: A => Boolean
-  ) extends Distributed[A]
-*/
+object Flow {
+  def main(args: Array[String]) {
+    
+  }
+}
+
+object FlowBuilder {
+
+}
+
+abstract class FlowBuilder[T](implicit graph: FlowGraph) = {
+  def map[U] = 
+}
 

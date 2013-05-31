@@ -70,6 +70,23 @@ object App {
     Util.delete(outB)
   }
 
+  /*
+  def mapFilterSugarTest() {
+    val jobDispatch = new JobDispatcher(qsub)
+    val input = (0 until 10000).toSeq
+    val output = input.map(_*3).filter(_<100)
+    
+    val outA = sharedConf.makeJobDir("outA")
+    val outB = sharedConf.makeJobDir("outB")
+
+    val base = TraversableFlow(input)
+    base.split.run(outA)
+
+
+    base.split.map(_*3).filter(_<100)
+  }
+  */
+
   def bigSortTest() {
     val jobDispatch = new JobDispatcher(qsub)
     val input = (0 until 100000).reverse
@@ -97,6 +114,7 @@ object App {
     
     Util.delete(jobDir)
   }
+
   def runTests() {
     caseClassTest
     splitFileTest()

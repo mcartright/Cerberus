@@ -220,6 +220,32 @@ object BuildIndex {
   }
   */
 
+ /*
+  def runIdeal(files: Seq[String], dest: String) = {
+    implicit val sharedConf = new SharedConfig
+    val jobDispatch = new JobDispatcher(new LocalJobService)
+    Util.mkdir(dest)
+    
+    val writeLengths = lengthsWriter(dest)
+    val writeNames = namesWriter(dest)
+    val writePostings = postingsWriter(dest)
+
+    // create a distribitued seq
+    val counted = files.split.map(count).run
+    val shifted = counted.merged.map(offset).run
+    
+    val parsedDocuments = shifted.split.flatMap(intoDocuments).map(tokenize).map(normalize)
+    
+    val lengthsPipe = parsedDocuments.map { 
+      doc => IdLength(doc.id, doc.text.length)
+    }.sortBy(_.id).write
+
+    val namesPipe = parsedDocuments.map {
+      doc => IdName(doc.id, doc.name)
+    }.sortBy(_.id).write
+  }
+  */
+
   def runLocally(files: Seq[String], dest: String) = {
     Util.mkdir(dest)
     

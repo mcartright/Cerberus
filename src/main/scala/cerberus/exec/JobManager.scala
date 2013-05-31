@@ -5,7 +5,6 @@ import cerberus.service._
 
 import scala.concurrent._
 import scala.concurrent.duration._
-import scala.reflect.ClassTag
 import ExecutionContext.Implicits.global
 
 trait AbstractJobStep extends Encodable {
@@ -18,7 +17,7 @@ trait AbstractJobStep extends Encodable {
 /**
  * This class is responsible for execution of a source and a graph
  */
-case class Executor[T :ClassTag](val src: Source[T], val pushTo: Node[T]) {
+case class Executor[T](val src: Source[T], val pushTo: Node[T]) {
   def run(cfg: RuntimeConfig) {
     assert(cfg != null)
     
@@ -38,7 +37,7 @@ case class Executor[T :ClassTag](val src: Source[T], val pushTo: Node[T]) {
   }
 }
 
-class ExecutorStep[T :ClassTag](
+class ExecutorStep[T](
   val src: Source[T],
   val node: Node[T],
   val name: String
@@ -54,7 +53,7 @@ class ExecutorStep[T :ClassTag](
 class JobDispatcher(qsub: JobService) {
   val server = JServer()
 
-  private def spawn[T :ClassTag](
+  private def spawn[T](
     src: Source[T], 
     node: Node[T],
     name: String,
@@ -68,7 +67,7 @@ class JobDispatcher(qsub: JobService) {
     JobRunner.dispatch(server, new ExecutorStep(src, node, name), nodeId, split, conf)
   }
 
-  def run[T :ClassTag](
+  def run[T](
     src: Source[T],
     node: Node[T],
     name: String
@@ -83,7 +82,7 @@ class JobDispatcher(qsub: JobService) {
    * Runs a parallel task on conf.distrib nodes
    * @see SharedConfig
    */
-  def runDistributed[T :ClassTag](
+  def runDistributed[T](
     src: Source[T],
     node: Node[T],
     name: String
@@ -107,7 +106,7 @@ class JobDispatcher(qsub: JobService) {
   /**
    * Runs a serial task on another node
    */
-  def runSerial[T :ClassTag](
+  def runSerial[T](
     src: Source[T],
     node: Node[T],
     name: String

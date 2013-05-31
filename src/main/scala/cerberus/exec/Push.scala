@@ -33,7 +33,7 @@ import scala.math.Ordering
  * explicit flow of init -> process -> process... -> close
  *
  */
-abstract class Node[T :ClassTag] extends Encodable {
+abstract class Node[T] extends Encodable {
   def init(cfg: RuntimeConfig): Unit
   def process(next: T): Unit
   def close(): Unit
@@ -42,7 +42,7 @@ abstract class Node[T :ClassTag] extends Encodable {
 /**
  * EchoNode -- for debugging
  */
-class EchoNode[T :ClassTag](val id: String, val child: Node[T]) extends Node[T] {
+class EchoNode[T](val id: String, val child: Node[T]) extends Node[T] {
   def init(cfg: RuntimeConfig) {
     println("EchoNode "+id+" init")
     child.init(cfg)
@@ -60,13 +60,13 @@ class EchoNode[T :ClassTag](val id: String, val child: Node[T]) extends Node[T] 
 /**
  * NullNode -- for debugging
  */
-class NullNode[T :ClassTag] extends Node[T] {
+class NullNode[T] extends Node[T] {
   def init(cfg: RuntimeConfig) { }
   def process(next: T) { }
   def close() { }
 }
 
-class MappedNode[A :ClassTag, B :ClassTag](val child: Node[B], val oper: A=>B) extends Node[A] {
+class MappedNode[A, B](val child: Node[B], val oper: A=>B) extends Node[A] {
   def init(cfg: RuntimeConfig) {
     TryInitAndClose.init(oper)
     child.init(cfg)
@@ -78,7 +78,7 @@ class MappedNode[A :ClassTag, B :ClassTag](val child: Node[B], val oper: A=>B) e
   }
 }
 
-class FlatMappedNode[A :ClassTag, B :ClassTag](val child: Node[B], val oper: A=>GenTraversableOnce[B]) extends Node[A] {
+class FlatMappedNode[A, B](val child: Node[B], val oper: A=>GenTraversableOnce[B]) extends Node[A] {
   def init(cfg: RuntimeConfig) {
     TryInitAndClose.init(oper)
     child.init(cfg)
@@ -93,7 +93,7 @@ class FlatMappedNode[A :ClassTag, B :ClassTag](val child: Node[B], val oper: A=>
   }
 }
 
-class ForeachedNode[T :ClassTag, U](val oper: T=>U) extends Node[T] {
+class ForeachedNode[T, U](val oper: T=>U) extends Node[T] {
   def init(cfg: RuntimeConfig) {
     TryInitAndClose.init(oper)
   }
@@ -105,7 +105,7 @@ class ForeachedNode[T :ClassTag, U](val oper: T=>U) extends Node[T] {
   }
 }
 
-class FilteredNode[T :ClassTag](val child: Node[T], val oper: T=>Boolean) extends Node[T] {
+class FilteredNode[T](val child: Node[T], val oper: T=>Boolean) extends Node[T] {
   def init(cfg: RuntimeConfig) {
     TryInitAndClose.init(oper)
     child.init(cfg)
@@ -117,7 +117,7 @@ class FilteredNode[T :ClassTag](val child: Node[T], val oper: T=>Boolean) extend
   }
 }
 
-class MultiNode[T :ClassTag](val children: Seq[Node[T]]) extends Node[T] {
+class MultiNode[T](val children: Seq[Node[T]]) extends Node[T] {
   def init(cfg: RuntimeConfig) = children.foreach(_.init(cfg))
   def process(next: T) = children.foreach(_.process(next))
   def close() = children.foreach(_.close())

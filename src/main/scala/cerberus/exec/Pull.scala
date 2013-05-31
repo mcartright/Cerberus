@@ -12,7 +12,7 @@ import scala.collection.GenTraversableOnce
  * Generic interface to a Source
  * A Reader[T] is nothing more than a closeable Iterator[T]
  */
-abstract class Source[T :ClassTag] extends Encodable {
+abstract class Source[T] extends Encodable {
   def canDistrib: Boolean
   def getReader(cfg: RuntimeConfig): Reader[T]
 }
@@ -56,7 +56,7 @@ case class SortedMergeSource[T :ClassTag](
   def getReader(cfg: RuntimeConfig) = {
     new Reader[T] {
       // keep the files around for closing
-      val files = SplitFormat.allReaders(path)
+      val files = SplitFormat.allReaders[T](path)
       // grab buffered iterators to perform the sorted merge
       val iters = files.map(_.buffered)
 
@@ -72,7 +72,7 @@ case class SortedMergeSource[T :ClassTag](
   }
 }
 
-case class TraversableSource[T :ClassTag](seq: GenTraversableOnce[T]) extends Source[T] {
+case class TraversableSource[T](seq: GenTraversableOnce[T]) extends Source[T] {
   val data = seq.toIndexedSeq
   val len = data.size
   def canDistrib = false
