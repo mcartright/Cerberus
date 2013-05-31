@@ -113,6 +113,7 @@ object BuildIndex {
   def lengthsWriter(prefix: String) = new LengthsWriter(prefix)
   def postingsWriter(prefix: String) = new PostingsWriter(prefix)
 
+  /*
   def runForked(files: Seq[String], dest: String) = {
     implicit val encoding = JavaObjectProtocol()
     implicit val conf = new SharedConfig()
@@ -217,6 +218,7 @@ object BuildIndex {
     // cleanup pipes
     Set(countedFiles, shiftedFiles, lengthsPipes.toSet, namesPipes.toSet, postingsPipes.toSet).flatten.foreach(Util.delete(_))
   }
+  */
 
   def runLocally(files: Seq[String], dest: String) = {
     Util.mkdir(dest)
@@ -257,10 +259,11 @@ object BuildIndex {
   }
 
   def main(args: Array[String]) {
-    //testSerializable(offset)(JavaObjectProtocol())
-    //testSerializable(new LengthsWriter("/tmp/"))(JavaObjectProtocol())
-    //runLocally(Seq("data/test1","data/test2"), "locally-built-index/")
-    runForked(Seq("data/test1","data/test2"), "fork-built-index/")
+    implicit val encoding = JavaObjectProtocol()
+    testSerializable(offset)
+    testSerializable(new LengthsWriter("/tmp/"))
+    runLocally(Seq("data/test1","data/test2"), "locally-built-index/")
+    //runForked(Seq("data/test1","data/test2"), "fork-built-index/")
   }
 }
 

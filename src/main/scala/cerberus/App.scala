@@ -12,6 +12,7 @@ object App {
 
   implicit val encoding: Protocol = JavaObjectProtocol()
   
+  /*
   def runTest(testFn: String=>Unit) {
     val scratchFile = cfg.nextScratchName()
     testFn(scratchFile)
@@ -207,9 +208,11 @@ object App {
     println("Merge:")
     mergeTest()
   }
+  */
 
   def main(args: Array[String]) {
-    runTests()
+    //runTests()
+    println("Hello World!")
   }
 }
 

@@ -227,7 +227,7 @@ class SortedNode[T :ClassTag](
         val scratchFile = rcfg.nextScratchName()
         
         // create a fileNode for flushing
-        val tmpFileNode = new FileNode[T](scratchFile)
+        val tmpFileNode = new ScratchFileNode[T](scratchFile)
         tmpFileNode.init(rcfg)
         merge(fgrp.toSet, tmpFileNode)
 

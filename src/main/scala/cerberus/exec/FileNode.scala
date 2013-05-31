@@ -38,5 +38,14 @@ class RoundRobinDistribOutputNode[T :ClassTag](val path: String)(implicit val en
   }
 }
 
+class ScratchFileNode[T :ClassTag](val path: String)(implicit val encoding: Protocol) extends Node[T] {
+  var writer: Writer[T] = null
+  def init(cfg: RuntimeConfig) {
+    writer = encoding.getWriter[T](path)
+  }
+  def process(next: T) = writer.put(next)
+  def close() = writer.close()
+}
+
 //TODO HashedDistribOutputNode
 
