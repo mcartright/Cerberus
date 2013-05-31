@@ -51,9 +51,8 @@ class ExecutorStep[T :ClassTag](
   }
 }
 
-class JobDispatcher {
+class JobDispatcher(qsub: JobService) {
   val server = JServer()
-  val qsub = new LocalJobService
 
   private def spawn[T :ClassTag](
     src: Source[T], 
@@ -66,9 +65,20 @@ class JobDispatcher {
     val jobId = qsub.spawnJob(JobRunner.FullName, Array(server.hostName, server.port.toString))
     println("spawned "+jobId)
 
-    JobRunner.dispatch(server.accept(), new ExecutorStep(src, node, name), nodeId, split, conf)
+    JobRunner.dispatch(server, new ExecutorStep(src, node, name), nodeId, split, conf)
   }
 
+  def run[T :ClassTag](
+    src: Source[T],
+    node: Node[T],
+    name: String
+  )(implicit conf: SharedConfig) {
+    if(src.canDistrib) {
+      runDistributed(src, node, name)
+    } else {
+      runSerial(src, node, name)
+    }
+  }
   /**
    * Runs a parallel task on conf.distrib nodes
    * @see SharedConfig
@@ -97,7 +107,7 @@ class JobDispatcher {
   /**
    * Runs a serial task on another node
    */
-  def run[T :ClassTag](
+  def runSerial[T :ClassTag](
     src: Source[T],
     node: Node[T],
     name: String
@@ -126,12 +136,14 @@ class JobDispatcher {
 
 object JobRunner {
   val FullName = "cerberus.exec.JobRunner"
-  def dispatch(client: JSocket, task: AbstractJobStep, nodeId: Int, split: Boolean, conf: SharedConfig): Future[Int] = {
-    // begin protocol
-    client.write(new RuntimeConfig(task.id, conf, nodeId, split))
-    client.write(task)
+  def dispatch(srv: JServer, task: AbstractJobStep, nodeId: Int, split: Boolean, conf: SharedConfig): Future[Int] = {
 
     future { 
+      val client = srv.accept()
+      // begin protocol
+      client.write(new RuntimeConfig(task.id, conf, nodeId, split))
+      client.write(task)
+
       val result = client.read[java.lang.Integer]()
       client.close()
       result.intValue
