@@ -22,7 +22,7 @@ class SplitOutputNode[T :ClassTag](val path: String)(implicit val encoding: Prot
   def close() = writer.close()
 }
 
-class RoundRobinDistribOutputNode[T :ClassTag](val path: String)(implicit val encoding: Protocol) extends Node[T] {
+class RoundRobinOutputNode[T :ClassTag](val path: String)(implicit val encoding: Protocol) extends Node[T] {
   var writers: IndexedSeq[SplitWriter[T]] = null
   var nextWriter: Int = 0
 
@@ -37,6 +37,7 @@ class RoundRobinDistribOutputNode[T :ClassTag](val path: String)(implicit val en
     writers.foreach(_.close())
   }
 }
+//TODO HashedOutputNode
 
 class ScratchFileNode[T :ClassTag](val path: String)(implicit val encoding: Protocol) extends Node[T] {
   var writer: Writer[T] = null
@@ -47,5 +48,4 @@ class ScratchFileNode[T :ClassTag](val path: String)(implicit val encoding: Prot
   def close() = writer.close()
 }
 
-//TODO HashedDistribOutputNode
 

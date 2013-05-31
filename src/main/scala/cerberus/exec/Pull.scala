@@ -13,15 +13,18 @@ import scala.collection.GenTraversableOnce
  * A Reader[T] is nothing more than a closeable Iterator[T]
  */
 abstract class Source[T :ClassTag] extends Encodable {
+  def canDistrib: Boolean
   def getReader(cfg: RuntimeConfig): Reader[T]
 }
 
 case class SplitInputSource[T :ClassTag](val path: String)(implicit val encoding: Protocol) extends Source[T] {
+  def canDistrib = true
   def getReader(cfg: RuntimeConfig): Reader[T] =
     new SplitReader[T](path, cfg.nodeId, cfg.numNodes)
 }
 
 case class MergedFileSource[T :ClassTag](val path: String)(implicit val encoding: Protocol) extends Source[T] {
+  def canDistrib = false
   def getReader(cfg: RuntimeConfig) = new Reader[T] {
     val orderedFiles = (0 until cfg.numNodes).map(idx => SplitFormat.dataPath(path, idx))
     var fp = encoding.getReader[T](orderedFiles(0))
@@ -49,10 +52,11 @@ case class SortedMergeSource[T :ClassTag](
   implicit val ord: math.Ordering[T],
   implicit val encoding: Protocol
 ) extends Source[T] {
+  def canDistrib = false
   def getReader(cfg: RuntimeConfig) = {
     new Reader[T] {
       // keep the files around for closing
-      val files = SplitFormat.allReaders(path, cfg.numNodes)
+      val files = SplitFormat.allReaders(path)
       // grab buffered iterators to perform the sorted merge
       val iters = files.map(_.buffered)
 
@@ -71,6 +75,7 @@ case class SortedMergeSource[T :ClassTag](
 case class TraversableSource[T :ClassTag](seq: GenTraversableOnce[T]) extends Source[T] {
   val data = seq.toIndexedSeq
   val len = data.size
+  def canDistrib = false
   def getReader(cfg: RuntimeConfig) = {
     assert(!cfg.isSplitJob)
     new Reader[T] {

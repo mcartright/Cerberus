@@ -6,13 +6,15 @@ class SharedConfig extends Encodable {
   val tmpDirectories = Set[String]("/tmp")
   val jobDirectory = "."
   val distrib = 10
+
+  def makeJobDir(name: String) = Util.mkdir(jobDirectory+"/"+name)
 }
 
 class RuntimeConfig(
   val jobUniq: String,
   val shared: SharedConfig,
-  val nodeId: Int=0,
-  val split: Boolean = false
+  val nodeId: Int,
+  val split: Boolean
 ) extends Encodable {
   val myTempFolder = Util.mkdir("/tmp/"+jobUniq)
 
